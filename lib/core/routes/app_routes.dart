@@ -12,6 +12,7 @@ import '../../features/tools/trending_instruments/trending_instruments_screen.da
 import '../../features/tools/class_scheduler/class_scheduler_screen.dart';
 import '../../features/tools/instrument_prices/instrument_prices_screen.dart';
 import '../../features/tools/private_class/private_class_screen.dart';
+import '../../features/tools/music_reference/music_reference_screen.dart';
 import '../../widgets/main_bottom_nav.dart';
 
 class AppRoutes {
@@ -30,5 +31,6 @@ class AppRoutes {
     '/instrument-prices': (context) => const InstrumentPricesScreen(),
     '/private-class': (context) => const PrivateClassScreen(),
     '/scheduler': (context) => const ClassSchedulerScreen(),
+    '/music-reference': (context) => const MusicReferenceScreen(),
   };
 }

@@ -3,8 +3,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
-import '../../services/session_service.dart';
+
 import '../../services/practice_progress_service.dart';
+import '../../services/session_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -14,15 +15,31 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  String userName = 'Guest User';
+  static const Color _bg = Color(0xFF0B0D22);
+  static const Color _surface = Color(0xFF17182C);
+  static const Color _surfaceSoft = Color(0xFF232542);
+  static const Color _border = Color(0xFF2D3050);
+  static const Color _text = Color(0xFFF8FAFC);
+  static const Color _muted = Color(0xFFB8BCD7);
+  static const Color _purple = Color(0xFF8B5CF6);
+  static const Color _cyan = Color(0xFF22D3EE);
+  static const Color _pink = Color(0xFFF472B6);
+  static const Color _green = Color(0xFF34D399);
+
+  String userName = 'Pengguna';
   String userEmail = 'guest@email.com';
   String? profileImagePath;
 
   int totalSessions = 0;
   int weeklySessions = 0;
   int? averageScore;
-  List<Map<String, dynamic>> historyItems = [];
+  Map<String, int> gameRecords = {
+    'best_score': 0,
+    'best_level': 0,
+    'best_combo': 0,
+  };
 
+  bool biometricEnabled = false;
   bool isLoading = true;
 
   @override
@@ -32,26 +49,61 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadProfileData() async {
+    if (!mounted) return;
+
     setState(() {
       isLoading = true;
     });
 
-    final name = await SessionService.getUserName();
-    final email = await SessionService.getUserEmail();
-    final summary = await PracticeProgressService.getSummary();
-    final history = await PracticeProgressService.getHistory();
-    final savedImagePath = await SessionService.getProfileImagePath();
+    String nextName = 'Pengguna';
+    String nextEmail = 'guest@email.com';
+    String? nextImagePath;
+    int nextTotalSessions = 0;
+    int nextWeeklySessions = 0;
+    int? nextAverageScore;
+    Map<String, int> nextGameRecords = {
+      'best_score': 0,
+      'best_level': 0,
+      'best_combo': 0,
+    };
+    bool nextBiometricEnabled = false;
+
+    try {
+      nextName = await SessionService.getUserName();
+      nextEmail = await SessionService.getUserEmail();
+      nextImagePath = await SessionService.getProfileImagePath();
+    } catch (_) {}
+
+    try {
+      final summary = await PracticeProgressService.getSummary();
+
+      nextTotalSessions = summary['total_sessions'] ?? 0;
+      nextWeeklySessions = summary['weekly_sessions'] ?? 0;
+      nextAverageScore = summary['average_score'];
+    } catch (_) {}
+
+    try {
+      nextGameRecords = await PracticeProgressService.getGameRecords();
+    } catch (_) {}
+
+    try {
+      nextBiometricEnabled =
+          await SessionService.isCurrentUserBiometricEnabled();
+    } catch (_) {}
 
     if (!mounted) return;
 
     setState(() {
-      userName = name;
-      userEmail = email;
-      totalSessions = summary['total_sessions'] ?? 0;
-      weeklySessions = summary['weekly_sessions'] ?? 0;
-      averageScore = summary['average_score'];
-      historyItems = history;
-      profileImagePath = savedImagePath;
+      userName = nextName.trim().isEmpty ? 'Pengguna' : nextName.trim();
+      userEmail = nextEmail.trim().isEmpty
+          ? 'guest@email.com'
+          : nextEmail.trim();
+      profileImagePath = nextImagePath;
+      totalSessions = nextTotalSessions;
+      weeklySessions = nextWeeklySessions;
+      averageScore = nextAverageScore;
+      gameRecords = nextGameRecords;
+      biometricEnabled = nextBiometricEnabled;
       isLoading = false;
     });
   }
@@ -60,8 +112,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final picker = ImagePicker();
     final picked = await picker.pickImage(
       source: ImageSource.gallery,
-      imageQuality: 78,
-      maxWidth: 800,
+      imageQuality: 82,
+      maxWidth: 900,
     );
 
     if (picked == null) return;
@@ -79,620 +131,500 @@ class _ProfileScreenState extends State<ProfileScreen> {
       profileImagePath = savedFile.path;
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Foto profil berhasil diperbarui'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    _showMessage('Foto profil berhasil diperbarui.');
   }
 
-  Future<void> _handleLogout(BuildContext context) async {
+  Future<void> _toggleBiometric() async {
+    if (biometricEnabled) {
+      await SessionService.disableBiometric();
+
+      if (!mounted) return;
+
+      setState(() {
+        biometricEnabled = false;
+      });
+
+      _showMessage('Login biometrik dinonaktifkan.');
+      return;
+    }
+
+    await SessionService.enableBiometricForUser(
+      name: userName,
+      email: userEmail,
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      biometricEnabled = true;
+    });
+
+    _showMessage('Login biometrik diaktifkan.');
+  }
+
+  Future<void> _logout() async {
     await SessionService.clearSession();
 
-    if (!context.mounted) return;
+    if (!mounted) return;
 
     Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
   }
 
-  void _showLogoutDialog(BuildContext context) {
+  void _showLogoutDialog() {
     showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Keluar Akun'),
-        content: const Text(
-          'Yakin ingin keluar dari akun Pitch Perfect di perangkat ini?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Batal'),
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: _surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
           ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(dialogContext);
-              await _handleLogout(context);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: const Text('Keluar'),
+          title: const Text(
+            'Logout',
+            style: TextStyle(color: _text, fontWeight: FontWeight.w900),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatCard({
-    required String title,
-    required String value,
-    required String subtitle,
-    required IconData icon,
-    required Color color,
-  }) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF7F7FB),
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: const Color(0xFFEDEDF5)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(icon, color: color, size: 21),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.w900,
-                color: Color(0xFF20243A),
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF23263A),
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 11,
-                height: 1.35,
-                color: Color(0xFF7C7E8A),
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMenuTile({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-    Color iconColor = const Color(0xFF8B5CF6),
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F7FB),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFEDEDF5)),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-        leading: Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(15),
-          ),
-          child: Icon(icon, color: iconColor),
-        ),
-        title: Text(
-          title,
-          style: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w900,
-            color: Color(0xFF23263A),
-          ),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(
-            subtitle,
-            style: const TextStyle(
-              fontSize: 12,
-              height: 1.35,
-              color: Color(0xFF7C7E8A),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-        trailing: const Icon(
-          Icons.arrow_forward_ios_rounded,
-          size: 17,
-          color: Color(0xFFB1B3BE),
-        ),
-        onTap: onTap,
-      ),
-    );
-  }
-
-  Widget _buildWeeklyProgressCard() {
-    final hasProgress = totalSessions > 0;
-    final weeklyTarget = 5;
-    final progressText = hasProgress
-        ? '$weeklySessions/$weeklyTarget sesi minggu ini'
-        : 'Mulai latihan pertamamu';
-    final description = hasProgress
-        ? 'Lanjutkan aktivitas musik agar progres mingguanmu tetap konsisten.'
-        : 'Buka Detect, Games, atau Planner Kelas untuk mulai mencatat progres.';
-
-    final progressValue = (weeklySessions / weeklyTarget).clamp(0.0, 1.0);
-
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE9F8F1),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFD3F0E2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'PROGRES MINGGU INI',
-                  style: TextStyle(
-                    fontSize: 11,
-                    letterSpacing: 0.9,
-                    color: Color(0xFF3FA37B),
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              Container(
-                width: 42,
-                height: 42,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF21C67A),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  hasProgress ? Icons.trending_up_rounded : Icons.play_arrow,
-                  color: Colors.white,
-                  size: 24,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            progressText,
-            style: const TextStyle(
-              fontSize: 23,
-              fontWeight: FontWeight.w900,
-              color: Color(0xFF1B4332),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            description,
-            style: const TextStyle(
-              fontSize: 13,
+          content: const Text(
+            'Session login akan dihapus dari perangkat ini.',
+            style: TextStyle(
+              color: _muted,
               height: 1.45,
-              color: Color(0xFF3F6B57),
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 14),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: progressValue,
-              minHeight: 9,
-              backgroundColor: Colors.white,
-              color: const Color(0xFF21C67A),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Batal'),
             ),
-          ),
-        ],
-      ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(dialogContext);
+                await _logout();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _pink,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: const Text('Keluar'),
+            ),
+          ],
+        );
+      },
     );
   }
 
-  Widget _buildAchievementBadge({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required Color color,
-    required bool unlocked,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: unlocked
-            ? color.withValues(alpha: 0.09)
-            : const Color(0xFFF4F4F7),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: unlocked
-              ? color.withValues(alpha: 0.16)
-              : const Color(0xFFE5E7EB),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: unlocked
-                  ? color.withValues(alpha: 0.13)
-                  : const Color(0xFFE5E7EB),
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: Icon(
-              unlocked ? icon : Icons.lock_rounded,
-              color: unlocked ? color : const Color(0xFF9CA3AF),
-              size: 22,
-            ),
-          ),
-          const SizedBox(width: 13),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w900,
-                    color: unlocked
-                        ? const Color(0xFF20243A)
-                        : const Color(0xFF9CA3AF),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 12,
-                    height: 1.35,
-                    fontWeight: FontWeight.w600,
-                    color: unlocked
-                        ? const Color(0xFF6B7280)
-                        : const Color(0xFFA1A1AA),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (unlocked)
-            const Icon(
-              Icons.check_circle_rounded,
-              color: Color(0xFF21C67A),
-              size: 22,
-            ),
-        ],
-      ),
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
     );
   }
 
-  Widget _buildAchievementSection() {
-    bool hasType(String keyword) {
-      return historyItems.any((item) {
-        final type = (item['type'] ?? '').toString().toLowerCase();
-        return type.contains(keyword.toLowerCase());
-      });
-    }
+  Widget _avatar() {
+    final path = profileImagePath;
+    final hasImage = path != null && path.isNotEmpty && File(path).existsSync();
 
-    final hasAnyActivity = totalSessions > 0;
-    final hasScheduler = hasType('smart practice scheduler');
-    final hasPlanner = hasType('planner kelas');
-    final hasInstrumentPlan = hasType('rencana beli alat');
-    final hasGame = hasType('game');
-    final hasNotification = hasType('notifikasi');
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Stack(
       children: [
-        const Text(
-          'Achievement Musik',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w900,
-            color: Color(0xFF20243A),
+        Container(
+          width: 108,
+          height: 108,
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: const LinearGradient(
+              colors: [_purple, _cyan, _pink],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: _cyan.withValues(alpha: 0.22),
+                blurRadius: 28,
+                offset: const Offset(0, 12),
+              ),
+            ],
+          ),
+          child: Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: const BoxDecoration(
+              color: _surfaceSoft,
+              shape: BoxShape.circle,
+            ),
+            child: hasImage
+                ? Image.file(File(path), fit: BoxFit.cover)
+                : const Icon(Icons.person_rounded, color: _muted, size: 58),
           ),
         ),
-        const SizedBox(height: 6),
-        const Text(
-          'Badge terbuka otomatis dari aktivitas asli yang kamu lakukan di Pitch Perfect.',
-          style: TextStyle(
-            fontSize: 13,
-            height: 1.45,
-            color: Color(0xFF7C7E8A),
-            fontWeight: FontWeight.w600,
+        Positioned(
+          right: 2,
+          bottom: 2,
+          child: InkWell(
+            onTap: _pickProfileImage,
+            borderRadius: BorderRadius.circular(999),
+            child: Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [_cyan, _purple]),
+                shape: BoxShape.circle,
+                border: Border.all(color: _bg, width: 3),
+              ),
+              child: const Icon(
+                Icons.camera_alt_rounded,
+                color: Colors.white,
+                size: 18,
+              ),
+            ),
           ),
-        ),
-        const SizedBox(height: 14),
-        _buildAchievementBadge(
-          icon: Icons.play_circle_fill_rounded,
-          title: 'Langkah Pertama',
-          subtitle: 'Terbuka setelah ada aktivitas pertama di aplikasi.',
-          color: const Color(0xFF7C4DFF),
-          unlocked: hasAnyActivity,
-        ),
-        _buildAchievementBadge(
-          icon: Icons.event_available_rounded,
-          title: 'Planner Aktif',
-          subtitle: 'Terbuka setelah membuat jadwal latihan otomatis.',
-          color: const Color(0xFF00A86B),
-          unlocked: hasScheduler,
-        ),
-        _buildAchievementBadge(
-          icon: Icons.school_rounded,
-          title: 'Siap Kelas Privat',
-          subtitle: 'Terbuka setelah menyimpan rencana kelas privat.',
-          color: const Color(0xFFFF8A65),
-          unlocked: hasPlanner,
-        ),
-        _buildAchievementBadge(
-          icon: Icons.piano_rounded,
-          title: 'Pemburu Alat Musik',
-          subtitle: 'Terbuka setelah menyimpan minat alat musik.',
-          color: const Color(0xFF0072FF),
-          unlocked: hasInstrumentPlan,
-        ),
-        _buildAchievementBadge(
-          icon: Icons.videogame_asset_rounded,
-          title: 'Gamer Nada',
-          subtitle: 'Terbuka setelah menyelesaikan latihan lewat Games.',
-          color: const Color(0xFF9C27B0),
-          unlocked: hasGame,
-        ),
-        _buildAchievementBadge(
-          icon: Icons.notifications_active_rounded,
-          title: 'Reminder Siap',
-          subtitle: 'Terbuka setelah memakai fitur notifikasi latihan.',
-          color: const Color(0xFF21C67A),
-          unlocked: hasNotification,
         ),
       ],
     );
   }
 
-  static const Color _bgColor = Color(0xFFFCFCFE);
+  Widget _buildHeader() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF17182C), Color(0xFF251640), Color(0xFF122637)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: _border),
+        boxShadow: [
+          BoxShadow(
+            color: _purple.withValues(alpha: 0.14),
+            blurRadius: 28,
+            offset: const Offset(0, 14),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          _avatar(),
+          const SizedBox(height: 16),
+          Text(
+            userName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: _text,
+              fontSize: 25,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            userEmail,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: _muted,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            alignment: WrapAlignment.center,
+            children: [
+              _statusChip(
+                icon: Icons.verified_user_rounded,
+                text: 'Session aktif',
+                color: _green,
+              ),
+              _statusChip(
+                icon: biometricEnabled
+                    ? Icons.fingerprint_rounded
+                    : Icons.fingerprint_outlined,
+                text: biometricEnabled
+                    ? 'Biometrik aktif'
+                    : 'Biometrik nonaktif',
+                color: biometricEnabled ? _cyan : _muted,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusChip({
+    required IconData icon,
+    required String text,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.22)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 15),
+          const SizedBox(width: 6),
+          Text(
+            text,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStats() {
+    final accuracy = averageScore == null ? '-' : '$averageScore%';
+    final bestScore = gameRecords['best_score'] ?? 0;
+
+    return Row(
+      children: [
+        _statItem(
+          title: 'Aktivitas',
+          value: '$totalSessions',
+          icon: Icons.history_rounded,
+          color: _purple,
+        ),
+        const SizedBox(width: 10),
+        _statItem(
+          title: 'Minggu Ini',
+          value: '$weeklySessions',
+          icon: Icons.bolt_rounded,
+          color: _green,
+        ),
+        const SizedBox(width: 10),
+        _statItem(
+          title: 'Akurasi',
+          value: accuracy,
+          icon: Icons.insights_rounded,
+          color: _cyan,
+        ),
+        const SizedBox(width: 10),
+        _statItem(
+          title: 'Skor',
+          value: '$bestScore',
+          icon: Icons.videogame_asset_rounded,
+          color: _pink,
+        ),
+      ],
+    );
+  }
+
+  Widget _statItem({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+        decoration: BoxDecoration(
+          color: _surface,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: color.withValues(alpha: 0.20)),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 22),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: _text,
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: _muted,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _menuTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(24),
+      child: Ink(
+        padding: const EdgeInsets.all(15),
+        decoration: BoxDecoration(
+          color: _surface,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: color.withValues(alpha: 0.22)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.13),
+                borderRadius: BorderRadius.circular(17),
+              ),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(width: 13),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: _text,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _muted,
+                      fontSize: 12,
+                      height: 1.35,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.arrow_forward_ios_rounded,
+              color: Color(0xFF7E84A8),
+              size: 15,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _sectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        title,
+        style: const TextStyle(
+          color: _text,
+          fontSize: 20,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMenus() {
+    return Column(
+      children: [
+        _menuTile(
+          icon: biometricEnabled
+              ? Icons.fingerprint_rounded
+              : Icons.fingerprint_outlined,
+          title: biometricEnabled ? 'Biometrik Aktif' : 'Aktifkan Biometrik',
+          subtitle: biometricEnabled
+              ? 'Login cepat dengan fingerprint sudah aktif.'
+              : 'Gunakan fingerprint untuk masuk lebih cepat.',
+          color: biometricEnabled ? _green : _cyan,
+          onTap: _toggleBiometric,
+        ),
+        const SizedBox(height: 12),
+        _menuTile(
+          icon: Icons.rate_review_rounded,
+          title: 'Saran & Kesan TPM',
+          subtitle: 'Tulis kesan dan saran untuk mata kuliah TPM.',
+          color: _cyan,
+          onTap: () => Navigator.pushNamed(context, '/feedback'),
+        ),
+        const SizedBox(height: 12),
+        _menuTile(
+          icon: Icons.history_rounded,
+          title: 'Riwayat Latihan',
+          subtitle: 'Lihat aktivitas, referensi musik, jadwal, dan progres.',
+          color: _purple,
+          onTap: () => Navigator.pushNamed(context, '/history'),
+        ),
+        const SizedBox(height: 12),
+        _menuTile(
+          icon: Icons.logout_rounded,
+          title: 'Logout',
+          subtitle: 'Keluar dari akun di perangkat ini.',
+          color: _pink,
+          onTap: _showLogoutDialog,
+        ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final accuracyText = averageScore == null ? '-' : '$averageScore%';
-    final accuracySubtitle = averageScore == null
-        ? 'Belum ada nilai latihan'
-        : 'Rata-rata dari sesi tersimpan';
-
     return Scaffold(
-      backgroundColor: _bgColor,
+      backgroundColor: _bg,
+      appBar: AppBar(
+        backgroundColor: _bg,
+        elevation: 0,
+        centerTitle: true,
+        title: const Text(
+          'Profil',
+          style: TextStyle(color: _text, fontWeight: FontWeight.w900),
+        ),
+        iconTheme: const IconThemeData(color: _text),
+      ),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _loadProfileData,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(22, 20, 22, 30),
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 118),
             children: [
-              const Center(
-                child: Text(
-                  'Profil Saya',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w900,
-                    color: Color(0xFF20243A),
+              _buildHeader(),
+              const SizedBox(height: 20),
+              _sectionTitle('Ringkasan'),
+              if (isLoading)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(22),
+                    child: CircularProgressIndicator(color: _purple),
                   ),
-                ),
-              ),
+                )
+              else
+                _buildStats(),
               const SizedBox(height: 24),
-              Center(
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Container(
-                      width: 108,
-                      height: 108,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: const Color(0xFFD9D8FF),
-                          width: 3,
-                        ),
-                      ),
-                      child: CircleAvatar(
-                        radius: 50,
-                        backgroundColor: const Color(0xFFF1F2F8),
-                        backgroundImage:
-                            profileImagePath != null &&
-                                profileImagePath!.isNotEmpty
-                            ? FileImage(File(profileImagePath!))
-                            : null,
-                        child:
-                            profileImagePath == null ||
-                                profileImagePath!.isEmpty
-                            ? const Icon(
-                                Icons.person_rounded,
-                                size: 58,
-                                color: Color(0xFF6B7280),
-                              )
-                            : null,
-                      ),
-                    ),
-                    Positioned(
-                      right: -2,
-                      bottom: 2,
-                      child: InkWell(
-                        onTap: _pickProfileImage,
-                        borderRadius: BorderRadius.circular(14),
-                        child: Container(
-                          width: 34,
-                          height: 34,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF6C63FF),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: Colors.white, width: 3),
-                          ),
-                          child: const Icon(
-                            Icons.camera_alt_rounded,
-                            size: 17,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 18),
-              Center(
-                child: Text(
-                  userName,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w900,
-                    color: Color(0xFF20243A),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 6),
-              Center(
-                child: Text(
-                  userEmail,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Color(0xFF9093A3),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Center(
-                child: TextButton.icon(
-                  onPressed: _loadProfileData,
-                  icon: isLoading
-                      ? const SizedBox(
-                          width: 15,
-                          height: 15,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.refresh_rounded),
-                  label: const Text('Refresh Data Profil'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: const Color(0xFF6C63FF),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 10,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 22),
-              Row(
-                children: [
-                  _buildStatCard(
-                    title: 'Total Aktivitas',
-                    value: '$totalSessions',
-                    subtitle: 'Aktivitas tersimpan',
-                    icon: Icons.fitness_center_rounded,
-                    color: const Color(0xFF7C4DFF),
-                  ),
-                  const SizedBox(width: 12),
-                  _buildStatCard(
-                    title: 'Akurasi Nada',
-                    value: accuracyText,
-                    subtitle: accuracySubtitle,
-                    icon: Icons.graphic_eq_rounded,
-                    color: const Color(0xFF00A86B),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              _buildWeeklyProgressCard(),
-              const SizedBox(height: 24),
-              _buildAchievementSection(),
-              const SizedBox(height: 24),
-              _buildMenuTile(
-                icon: Icons.settings_rounded,
-                title: 'Pengaturan Aplikasi',
-                subtitle: 'Atur tampilan, keamanan, dan preferensi aplikasi.',
-                onTap: () => Navigator.pushNamed(context, '/settings'),
-              ),
-              _buildMenuTile(
-                icon: Icons.history_rounded,
-                title: 'Riwayat Aktivitas',
-                subtitle:
-                    'Lihat catatan latihan, aktivitas, dan progres musikmu.',
-                onTap: () => Navigator.pushNamed(context, '/history'),
-              ),
-              _buildMenuTile(
-                icon: Icons.notifications_active_rounded,
-                title: 'Notifikasi',
-                subtitle:
-                    'Cek pengingat latihan dan informasi penting dari aplikasi.',
-                onTap: () => Navigator.pushNamed(context, '/notifications'),
-              ),
-              _buildMenuTile(
-                icon: Icons.rate_review_rounded,
-                title: 'Saran & Kesan',
-                subtitle:
-                    'Kirim masukan agar Pitch Perfect bisa terus ditingkatkan.',
-                onTap: () => Navigator.pushNamed(context, '/feedback'),
-              ),
-              _buildMenuTile(
-                icon: Icons.logout_rounded,
-                title: 'Keluar Akun',
-                subtitle: 'Akhiri sesi login dari perangkat ini dengan aman.',
-                iconColor: Colors.redAccent,
-                onTap: () => _showLogoutDialog(context),
-              ),
+              _sectionTitle('Menu'),
+              _buildMenus(),
             ],
           ),
         ),

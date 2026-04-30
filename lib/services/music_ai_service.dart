@@ -1,78 +1,91 @@
 import 'dart:convert';
+
 import 'package:http/http.dart' as http;
+
 import '../core/config/api_keys.dart';
 
 class MusicAiService {
-  static const String _baseUrl =
-      'https://openrouter.ai/api/v1/chat/completions';
+  static String _limitMessage() {
+    return 'Maaf, AI Coach sedang mencapai limit. Coba beberapa saat lagi.';
+  }
 
   static Future<String> askMusicAssistant({
     required String question,
     required List<Map<String, dynamic>> history,
   }) async {
-    if (ApiKeys.openRouterApiKey.trim().isEmpty ||
-        ApiKeys.openRouterApiKey == 'ISI_API_KEY_OPENROUTER_KAMU_DI_SINI') {
-      throw Exception('API key OpenRouter belum diisi.');
+    final apiKey = ApiKeys.groqApiKey.trim();
+
+    if (apiKey.isEmpty || apiKey == 'TEMPEL_GROQ_KEY_KAMU_DI_SINI') {
+      return _limitMessage();
     }
 
-    final chatHistory = history
-        .where((message) {
-          final role = message['role']?.toString();
-          final text = message['text']?.toString();
-          return (role == 'user' || role == 'assistant') &&
-              text != null &&
-              text.trim().isNotEmpty;
-        })
-        .take(12)
-        .map((message) {
-          return {
-            'role': message['role'] == 'user' ? 'user' : 'assistant',
-            'content': message['text'].toString(),
-          };
-        })
-        .toList();
+    try {
+      final messages = <Map<String, String>>[
+        {
+          'role': 'system',
+          'content':
+              'Kamu adalah AI Music Coach di aplikasi Pitch Perfect. Jawab dalam bahasa Indonesia yang natural, singkat, jelas, dan praktis. Fokus hanya pada latihan vokal, stem gitar, teori musik dasar, solfege Do Re Mi, ear training, jadwal latihan, dan rekomendasi latihan berdasarkan progres. Jangan terlalu panjang. Gunakan poin jika membantu. Jangan mengaku bisa memutar lagu penuh.',
+        },
+        ...history
+            .where((item) {
+              final role = item['role']?.toString();
+              final text = item['text']?.toString().trim() ?? '';
+              return text.isNotEmpty &&
+                  (role == 'user' || role == 'assistant' || role == 'ai');
+            })
+            .take(8)
+            .map((item) {
+              final role = item['role']?.toString() == 'user'
+                  ? 'user'
+                  : 'assistant';
 
-    final response = await http.post(
-      Uri.parse(_baseUrl),
-      headers: {
-        'Authorization': 'Bearer ${ApiKeys.openRouterApiKey}',
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://pitch-perfect.local',
-        'X-Title': 'Pitch Perfect',
-      },
-      body: jsonEncode({
-        'model': 'openrouter/free',
-        'messages': [
-          {
-            'role': 'system',
-            'content':
-                'Kamu adalah Music Assistant di aplikasi Pitch Perfect. Jawab dalam bahasa Indonesia yang natural, ramah, dan tidak kaku. Kamu bisa ngobrol santai, membalas sapaan seperti hai/halo, menjawab pertanyaan musik, rekomendasi lagu, latihan vokal, gitar, tuning, solfege Do Re Mi, pemanasan suara, dan tips belajar musik. Jawaban harus sesuai pertanyaan user, jangan mengulang jawaban yang sama terus. Kalau user bertanya lagu lokal, Jawa, koplo, pop Indonesia, atau artis seperti Aftershine, Guyon Waton, Denny Caknan, NDX AKA, Happy Asmara, berikan rekomendasi yang relevan dan alasan singkat. Jika user bertanya cara latihan, beri langkah praktis. Jangan mengaku bisa memutar lagu penuh, cukup arahkan ke preview jika tersedia.',
-          },
-          ...chatHistory,
-          {'role': 'user', 'content': question},
-        ],
-        'temperature': 0.85,
-        'max_tokens': 700,
-      }),
-    );
+              return {'role': role, 'content': item['text'].toString()};
+            }),
+        {'role': 'user', 'content': question},
+      ];
 
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(
-        'OpenRouter gagal menjawab. Status: ${response.statusCode}. ${response.body}',
-      );
-    }
+      final response = await http
+          .post(
+            Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
+            headers: {
+              'Authorization': 'Bearer $apiKey',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'model': ApiKeys.groqModel,
+              'messages': messages,
+              'temperature': 0.75,
+              'max_tokens': 700,
+            }),
+          )
+          .timeout(const Duration(seconds: 18));
 
-    final decoded = jsonDecode(response.body);
-    final choices = decoded['choices'];
-
-    if (choices is List && choices.isNotEmpty) {
-      final message = choices.first['message'];
-      if (message is Map && message['content'] != null) {
-        final answer = message['content'].toString().trim();
-        if (answer.isNotEmpty) return answer;
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return _limitMessage();
       }
-    }
 
-    throw Exception('Jawaban AI kosong.');
+      final decoded = jsonDecode(response.body);
+      final choices = decoded['choices'];
+
+      if (choices is List && choices.isNotEmpty) {
+        final first = choices.first;
+
+        if (first is Map) {
+          final message = first['message'];
+
+          if (message is Map) {
+            final content = message['content']?.toString().trim() ?? '';
+
+            if (content.isNotEmpty) {
+              return content;
+            }
+          }
+        }
+      }
+
+      return _limitMessage();
+    } catch (_) {
+      return _limitMessage();
+    }
   }
 }

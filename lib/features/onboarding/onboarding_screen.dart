@@ -11,26 +11,35 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
-  final List<Map<String, String>> _pages = [
+  final List<Map<String, dynamic>> _pages = const [
     {
-      'title': 'Train Your Pitch',
-      'subtitle': 'Latih vokal dan nada dengan cara yang lebih interaktif.',
+      'title': 'Latihan Musik Lebih Terarah',
+      'subtitle':
+          'Tes vokal, stem gitar, dan pantau progres latihanmu dalam satu aplikasi.',
+      'icon': Icons.graphic_eq_rounded,
+      'color': Color(0xFF22D3EE),
     },
     {
-      'title': 'Useful Music Tools',
-      'subtitle': 'Cari toko musik, cek alat musik, dan atur jadwal kelas.',
+      'title': 'Tools untuk Musisi',
+      'subtitle':
+          'Temukan tempat musik, rencanakan alat incaran, dan buat jadwal latihan.',
+      'icon': Icons.piano_rounded,
+      'color': Color(0xFFF472B6),
     },
     {
-      'title': 'AI Coach & Games',
-      'subtitle': 'Dapatkan tips latihan dan mainkan mini game musik.',
+      'title': 'AI Coach & Game',
+      'subtitle':
+          'Dapatkan arahan latihan, pelajari teori musik, dan tingkatkan akurasi nada.',
+      'icon': Icons.psychology_rounded,
+      'color': Color(0xFF8B5CF6),
     },
   ];
 
   void _nextPage() {
     if (_currentPage < _pages.length - 1) {
       _pageController.nextPage(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
       );
     } else {
       _goToLogin();
@@ -41,17 +50,98 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     Navigator.pushReplacementNamed(context, '/login');
   }
 
+  Widget _buildLogoBadge() {
+    return Container(
+      width: 132,
+      height: 132,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(38),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF8B5CF6).withValues(alpha: 0.28),
+            blurRadius: 34,
+            offset: const Offset(0, 16),
+          ),
+        ],
+      ),
+      child: Image.asset(
+        'assets/images/pitch_perfect_logo.png',
+        fit: BoxFit.cover,
+      ),
+    );
+  }
+
+  Widget _buildFeatureIcon(Map<String, dynamic> page) {
+    final color = page['color'] as Color;
+
+    return Container(
+      width: 74,
+      height: 74,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: color.withValues(alpha: 0.22)),
+      ),
+      child: Icon(page['icon'] as IconData, color: color, size: 34),
+    );
+  }
+
+  Widget _buildDots() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(
+        _pages.length,
+        (index) => AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          width: _currentPage == index ? 24 : 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: _currentPage == index
+                ? const Color(0xFF8B5CF6)
+                : const Color(0xFF3A3D5F),
+            borderRadius: BorderRadius.circular(999),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isLastPage = _currentPage == _pages.length - 1;
+
     return Scaffold(
+      backgroundColor: const Color(0xFF0B0D22),
       body: SafeArea(
         child: Column(
           children: [
-            Align(
-              alignment: Alignment.topRight,
-              child: TextButton(
-                onPressed: _goToLogin,
-                child: const Text('Skip'),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 10, 22, 0),
+              child: Row(
+                children: [
+                  const Text(
+                    'Pitch Perfect',
+                    style: TextStyle(
+                      color: Color(0xFFF8FAFC),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: _goToLogin,
+                    child: const Text(
+                      'Skip',
+                      style: TextStyle(
+                        color: Color(0xFF8B5CF6),
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
             Expanded(
@@ -64,32 +154,36 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   });
                 },
                 itemBuilder: (context, index) {
+                  final page = _pages[index];
+
                   return Padding(
-                    padding: const EdgeInsets.all(24),
+                    padding: const EdgeInsets.fromLTRB(26, 16, 26, 12),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(
-                          Icons.music_video,
-                          size: 120,
-                          color: Colors.deepPurple,
-                        ),
-                        const SizedBox(height: 30),
+                        _buildLogoBadge(),
+                        const SizedBox(height: 34),
+                        _buildFeatureIcon(page),
+                        const SizedBox(height: 26),
                         Text(
-                          _pages[index]['title']!,
+                          page['title'].toString(),
                           textAlign: TextAlign.center,
                           style: const TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFF8FAFC),
+                            fontSize: 31,
+                            height: 1.12,
+                            fontWeight: FontWeight.w900,
                           ),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 14),
                         Text(
-                          _pages[index]['subtitle']!,
+                          page['subtitle'].toString(),
                           textAlign: TextAlign.center,
                           style: const TextStyle(
-                            fontSize: 16,
-                            color: Colors.black54,
+                            color: Color(0xFFB8BCD7),
+                            fontSize: 15,
+                            height: 1.55,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
@@ -98,34 +192,29 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 },
               ),
             ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(
-                _pages.length,
-                (index) => Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  width: _currentPage == index ? 20 : 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: _currentPage == index
-                        ? Colors.deepPurple
-                        : Colors.deepPurple.shade100,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ),
-            ),
+            _buildDots(),
             const SizedBox(height: 24),
             Padding(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 28),
               child: SizedBox(
                 width: double.infinity,
+                height: 58,
                 child: ElevatedButton(
                   onPressed: _nextPage,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF8B5CF6),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(22),
+                    ),
+                    elevation: 0,
+                  ),
                   child: Text(
-                    _currentPage == _pages.length - 1
-                        ? 'Get Started'
-                        : 'Next',
+                    isLastPage ? 'Mulai Sekarang' : 'Lanjut',
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                 ),
               ),

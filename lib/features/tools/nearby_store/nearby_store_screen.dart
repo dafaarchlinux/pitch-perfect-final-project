@@ -166,7 +166,7 @@ class _NearbyStoreScreenState extends State<NearbyStoreScreen> {
         margin: const EdgeInsets.only(bottom: 14),
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: const Color(0xFFF7F7FB),
+          color: const Color(0xFF17182C),
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
@@ -183,12 +183,12 @@ class _NearbyStoreScreenState extends State<NearbyStoreScreen> {
               width: 58,
               height: 58,
               decoration: BoxDecoration(
-                color: const Color(0xFF7C4DFF).withValues(alpha: 0.12),
+                color: const Color(0xFF8B5CF6).withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(18),
               ),
               child: const Icon(
                 Icons.store_mall_directory_rounded,
-                color: Color(0xFF7C4DFF),
+                color: Color(0xFF8B5CF6),
                 size: 28,
               ),
             ),
@@ -202,7 +202,7 @@ class _NearbyStoreScreenState extends State<NearbyStoreScreen> {
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
-                      color: Color(0xFF23263A),
+                      color: Color(0xFFF8FAFC),
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -210,7 +210,7 @@ class _NearbyStoreScreenState extends State<NearbyStoreScreen> {
                     address,
                     style: const TextStyle(
                       fontSize: 13,
-                      color: Color(0xFF7C7E8A),
+                      color: Color(0xFFB8BCD7),
                       height: 1.4,
                     ),
                   ),
@@ -225,7 +225,7 @@ class _NearbyStoreScreenState extends State<NearbyStoreScreen> {
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFEDE9FE),
+                          color: const Color(0xFF232542),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
@@ -233,7 +233,7 @@ class _NearbyStoreScreenState extends State<NearbyStoreScreen> {
                           style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
-                            color: Color(0xFF5E35B1),
+                            color: Color(0xFF8B5CF6),
                           ),
                         ),
                       ),
@@ -244,7 +244,7 @@ class _NearbyStoreScreenState extends State<NearbyStoreScreen> {
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFEFF6FF),
+                            color: const Color(0xFF17182C),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
@@ -252,7 +252,7 @@ class _NearbyStoreScreenState extends State<NearbyStoreScreen> {
                             style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w800,
-                              color: Color(0xFF0072FF),
+                              color: Color(0xFF22D3EE),
                             ),
                           ),
                         ),
@@ -267,7 +267,7 @@ class _NearbyStoreScreenState extends State<NearbyStoreScreen> {
     );
   }
 
-  static const Color _bgColor = Color(0xFFFCFCFE);
+  static const Color _bgColor = Color(0xFF0B0D22);
 
   @override
   Widget build(BuildContext context) {
@@ -282,11 +282,11 @@ class _NearbyStoreScreenState extends State<NearbyStoreScreen> {
         title: const Text(
           'Tempat Musik Terdekat',
           style: TextStyle(
-            color: Color(0xFF20243A),
+            color: Color(0xFFF8FAFC),
             fontWeight: FontWeight.w800,
           ),
         ),
-        iconTheme: const IconThemeData(color: Color(0xFF20243A)),
+        iconTheme: const IconThemeData(color: Color(0xFFF8FAFC)),
       ),
       body: SafeArea(
         child: RefreshIndicator(
@@ -298,7 +298,7 @@ class _NearbyStoreScreenState extends State<NearbyStoreScreen> {
                 'Temukan toko alat musik, studio musik, karaoke, kursus musik, dan layanan audio yang relevan di sekitar lokasimu.',
                 style: TextStyle(
                   fontSize: 14,
-                  color: Color(0xFF7C7E8A),
+                  color: Color(0xFFB8BCD7),
                   height: 1.5,
                 ),
               ),
@@ -306,7 +306,7 @@ class _NearbyStoreScreenState extends State<NearbyStoreScreen> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF7F7FB),
+                  color: const Color(0xFF17182C),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
@@ -322,7 +322,7 @@ class _NearbyStoreScreenState extends State<NearbyStoreScreen> {
                         locationText,
                         style: const TextStyle(
                           fontSize: 13,
-                          color: Color(0xFF23263A),
+                          color: Color(0xFFF8FAFC),
                           fontWeight: FontWeight.w600,
                           height: 1.45,
                         ),
@@ -367,7 +367,7 @@ class _NearbyStoreScreenState extends State<NearbyStoreScreen> {
                         ],
                       )
                     : Container(
-                        color: const Color(0xFFEDE9FE),
+                        color: const Color(0xFF232542),
                         alignment: Alignment.center,
                         child: const Padding(
                           padding: EdgeInsets.all(20),
@@ -377,7 +377,7 @@ class _NearbyStoreScreenState extends State<NearbyStoreScreen> {
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w700,
-                              color: Color(0xFF5E35B1),
+                              color: Color(0xFF8B5CF6),
                             ),
                           ),
                         ),
@@ -389,7 +389,7 @@ class _NearbyStoreScreenState extends State<NearbyStoreScreen> {
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w800,
-                  color: Color(0xFF23263A),
+                  color: Color(0xFFF8FAFC),
                 ),
               ),
               const SizedBox(height: 10),
@@ -399,7 +399,7 @@ class _NearbyStoreScreenState extends State<NearbyStoreScreen> {
                     : 'Menampilkan hasil dari data lokasi nyata yang paling relevan dengan kebutuhan musik.',
                 style: const TextStyle(
                   fontSize: 13,
-                  color: Color(0xFF7C7E8A),
+                  color: Color(0xFFB8BCD7),
                   height: 1.5,
                 ),
               ),
@@ -408,7 +408,7 @@ class _NearbyStoreScreenState extends State<NearbyStoreScreen> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF7F7FB),
+                    color: const Color(0xFF17182C),
                     borderRadius: BorderRadius.circular(18),
                   ),
                   child: const Row(
@@ -423,7 +423,7 @@ class _NearbyStoreScreenState extends State<NearbyStoreScreen> {
                         child: Text(
                           'Mencari toko dan layanan musik terdekat...',
                           style: TextStyle(
-                            color: Color(0xFF23263A),
+                            color: Color(0xFFF8FAFC),
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -436,28 +436,51 @@ class _NearbyStoreScreenState extends State<NearbyStoreScreen> {
                   padding: const EdgeInsets.all(16),
                   margin: const EdgeInsets.only(top: 8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFF1F2),
+                    color: const Color(0xFF2A1F16),
                     borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: Color(0xFF5B3A16)),
                   ),
-                  child: Text(
-                    errorText,
-                    style: const TextStyle(
-                      color: Color(0xFFB42318),
-                      fontWeight: FontWeight.w600,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        errorText,
+                        style: const TextStyle(
+                          color: Color(0xFFFFE7A8),
+                          fontWeight: FontWeight.w700,
+                          height: 1.45,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          if (latitude != null && longitude != null) {
+                            MapsLauncher.launchQuery(
+                              'toko musik studio musik kursus musik near me',
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.map_rounded),
+                        label: const Text('Cari di Maps'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Color(0xFF22D3EE),
+                          side: BorderSide(color: Color(0xFF2D3050)),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               if (!isLoadingStores && stores.isEmpty && errorText.isEmpty)
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF7F7FB),
+                    color: const Color(0xFF17182C),
                     borderRadius: BorderRadius.circular(18),
                   ),
                   child: const Text(
                     'Belum ditemukan toko alat musik atau layanan musik yang tercatat di area ini. Coba refresh atau buka Google Maps untuk pencarian langsung.',
                     style: TextStyle(
-                      color: Color(0xFF6B7280),
+                      color: Color(0xFFB8BCD7),
                       fontWeight: FontWeight.w600,
                     ),
                   ),

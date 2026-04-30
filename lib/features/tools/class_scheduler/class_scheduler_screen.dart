@@ -1,10 +1,12 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 import '../../../services/notification_service.dart';
 import '../../../services/practice_progress_service.dart';
+
+const Color _surface = Color(0xFF17182C);
+const Color _surfaceSoft = Color(0xFF232542);
+const Color _text = Color(0xFFF8FAFC);
+const Color _purple = Color(0xFF8B5CF6);
+const Color _cyan = Color(0xFF22D3EE);
 
 class ClassSchedulerScreen extends StatefulWidget {
   const ClassSchedulerScreen({super.key});
@@ -14,8 +16,6 @@ class ClassSchedulerScreen extends StatefulWidget {
 }
 
 class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
-  static const String _savedSchedulesKey = 'smart_practice_schedules';
-
   String selectedPractice = 'Gitar';
   String selectedTarget = 'Tuning Gitar';
   String selectedZone = 'WIB';
@@ -42,7 +42,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
   final Map<String, Map<String, dynamic>> practiceCatalog = {
     'Vokal': {
       'icon': Icons.mic_rounded,
-      'color': Color(0xFF7C4DFF),
+      'color': Color(0xFF8B5CF6),
       'targets': [
         'Pemanasan Vokal',
         'Pernapasan Diafragma',
@@ -56,7 +56,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
     },
     'Gitar': {
       'icon': Icons.music_note_rounded,
-      'color': Color(0xFFFF8A65),
+      'color': Color(0xFFFBBF24),
       'targets': [
         'Tuning Gitar',
         'Chord Dasar',
@@ -71,7 +71,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
     },
     'Piano': {
       'icon': Icons.piano_rounded,
-      'color': Color(0xFF00A6FB),
+      'color': Color(0xFF22D3EE),
       'targets': [
         'Chord Progression',
         'Melodi Dasar',
@@ -84,7 +84,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
     },
     'Biola': {
       'icon': Icons.library_music_rounded,
-      'color': Color(0xFF21C67A),
+      'color': Color(0xFF34D399),
       'targets': [
         'Bowing Dasar',
         'Intonasi',
@@ -97,7 +97,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
     },
     'Ear Training': {
       'icon': Icons.hearing_rounded,
-      'color': Color(0xFF9C27B0),
+      'color': Color(0xFFF472B6),
       'targets': [
         'Do Re Mi',
         'Tebak Nada',
@@ -110,7 +110,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
     },
     'Recording': {
       'icon': Icons.mic_external_on_rounded,
-      'color': Color(0xFF0072FF),
+      'color': Color(0xFF22D3EE),
       'targets': [
         'Take Vokal',
         'Mic Control',
@@ -159,34 +159,29 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
   }
 
   Future<void> _loadSavedSchedules() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_savedSchedulesKey);
+    final schedules = await PracticeProgressService.getPracticeSchedules();
 
-    if (raw == null || raw.trim().isEmpty) return;
+    if (!mounted) return;
 
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! List) return;
+    setState(() {
+      savedSchedules
+        ..clear()
+        ..addAll(schedules);
 
-      if (!mounted) return;
-
-      setState(() {
-        savedSchedules
-          ..clear()
-          ..addAll(
-            decoded.whereType<Map>().map(
-              (item) => Map<String, dynamic>.from(item),
-            ),
-          );
-      });
-    } catch (_) {
-      return;
-    }
+      scheduleDisplayZones
+        ..clear()
+        ..addEntries(
+          schedules.where((item) => item['id'] is int).map((item) {
+            final id = item['id'] as int;
+            final zone = item['zone']?.toString() ?? 'WIB';
+            return MapEntry(id, zone);
+          }),
+        );
+    });
   }
 
   Future<void> _persistSavedSchedules() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_savedSchedulesKey, jsonEncode(savedSchedules));
+    await PracticeProgressService.savePracticeSchedules(savedSchedules);
   }
 
   String _formatTimeFromParts(int hour, int minute) {
@@ -281,6 +276,29 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
           : selectedDate,
       firstDate: DateTime(now.year, now.month, now.day),
       lastDate: DateTime(now.year + 3, 12, 31),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: _purple,
+              onPrimary: Colors.white,
+              surface: _surface,
+              onSurface: _text,
+            ),
+            dialogTheme: const DialogThemeData(backgroundColor: _surface),
+            datePickerTheme: const DatePickerThemeData(
+              backgroundColor: _surface,
+              headerBackgroundColor: _purple,
+              headerForegroundColor: Colors.white,
+              dayForegroundColor: WidgetStatePropertyAll(_text),
+              yearForegroundColor: WidgetStatePropertyAll(_text),
+              todayForegroundColor: WidgetStatePropertyAll(_cyan),
+              todayBorder: BorderSide(color: _cyan),
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
 
     if (picked == null) return;
@@ -294,6 +312,31 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
     final picked = await showTimePicker(
       context: context,
       initialTime: selectedTime,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: _purple,
+              onPrimary: Colors.white,
+              surface: _surface,
+              onSurface: _text,
+            ),
+            dialogTheme: const DialogThemeData(backgroundColor: _surface),
+            timePickerTheme: const TimePickerThemeData(
+              backgroundColor: _surface,
+              hourMinuteColor: _surfaceSoft,
+              hourMinuteTextColor: _text,
+              dialBackgroundColor: _surfaceSoft,
+              dialHandColor: _purple,
+              dialTextColor: _text,
+              entryModeIconColor: _cyan,
+              dayPeriodColor: _surfaceSoft,
+              dayPeriodTextColor: _text,
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
 
     if (picked == null) return;
@@ -440,14 +483,14 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
           label: Text(value),
           selected: selected,
           onSelected: (_) => onSelected(value),
-          selectedColor: const Color(0xFF7C4DFF),
-          backgroundColor: const Color(0xFFF1F3F9),
+          selectedColor: const Color(0xFF8B5CF6),
+          backgroundColor: const Color(0xFF232542),
           labelStyle: TextStyle(
-            color: selected ? Colors.white : const Color(0xFF4B5563),
+            color: selected ? Colors.white : const Color(0xFFDDE2FF),
             fontWeight: FontWeight.w800,
           ),
           side: BorderSide(
-            color: selected ? const Color(0xFF7C4DFF) : const Color(0xFFE5E7EB),
+            color: selected ? const Color(0xFF8B5CF6) : const Color(0xFF2D3050),
           ),
         );
       }).toList(),
@@ -463,7 +506,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
           Text(
             title,
             style: const TextStyle(
-              color: Color(0xFF20243A),
+              color: Color(0xFFF8FAFC),
               fontSize: 17,
               fontWeight: FontWeight.w900,
             ),
@@ -472,7 +515,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
           Text(
             subtitle,
             style: const TextStyle(
-              color: Color(0xFF7C7E8A),
+              color: Color(0xFFB8BCD7),
               fontSize: 13,
               height: 1.4,
               fontWeight: FontWeight.w600,
@@ -487,19 +530,19 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _surfaceSoft,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFFE6E2FF)),
+        border: Border.all(color: const Color(0xFF2D3050)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 15, color: const Color(0xFF7C4DFF)),
+          Icon(icon, size: 15, color: const Color(0xFF8B5CF6)),
           const SizedBox(width: 5),
           Text(
             text,
             style: const TextStyle(
-              color: Color(0xFF4B4E63),
+              color: Color(0xFFDDE2FF),
               fontSize: 11,
               fontWeight: FontWeight.w800,
             ),
@@ -517,16 +560,16 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFEFFAF4),
+        color: const Color(0xFF12251F),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFCDEEDB)),
+        border: Border.all(color: const Color(0xFF245C46)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Icon(
             Icons.phone_android_rounded,
-            color: Color(0xFF00A86B),
+            color: Color(0xFF34D399),
             size: 28,
           ),
           const SizedBox(width: 13),
@@ -534,7 +577,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
             child: Text(
               'Jam perangkat HP kamu: $nowText. Reminder otomatis mengikuti jam perangkat ini.',
               style: const TextStyle(
-                color: Color(0xFF166534),
+                color: Color(0xFFC4F1E2),
                 fontSize: 13,
                 height: 1.45,
                 fontWeight: FontWeight.w800,
@@ -586,9 +629,9 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 13),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _surfaceSoft,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: const Color(0xFF2D3050)),
       ),
       child: DropdownButton<String>(
         value: value,
@@ -626,9 +669,9 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F7FB),
+        color: const Color(0xFF17182C),
         borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: const Color(0xFFEDEDF5)),
+        border: Border.all(color: const Color(0xFF2D3050)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -636,7 +679,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
           const Text(
             'Konversi Manual Jadwal',
             style: TextStyle(
-              color: Color(0xFF20243A),
+              color: Color(0xFFF8FAFC),
               fontSize: 19,
               fontWeight: FontWeight.w900,
             ),
@@ -645,7 +688,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
           const Text(
             'Gunakan ini sebagai patokan sebelum menyimpan jadwal. Pilih waktu asal, lalu lihat hasilnya di zona tujuan.',
             style: TextStyle(
-              color: Color(0xFF6B7280),
+              color: Color(0xFFB8BCD7),
               fontSize: 13,
               height: 1.45,
               fontWeight: FontWeight.w600,
@@ -657,8 +700,8 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
             icon: const Icon(Icons.calendar_month_rounded),
             label: Text(_formatDate(manualConvertDate)),
             style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF5E35B1),
-              side: const BorderSide(color: Color(0xFFDDD6FE)),
+              foregroundColor: const Color(0xFF8B5CF6),
+              side: const BorderSide(color: Color(0xFF2D3050)),
               padding: const EdgeInsets.symmetric(vertical: 14),
               minimumSize: const Size(double.infinity, 48),
               shape: RoundedRectangleBorder(
@@ -672,8 +715,8 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
             icon: const Icon(Icons.schedule_rounded),
             label: Text('Jam asal: ${_formatTime(manualConvertTime)}'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF5E35B1),
-              side: const BorderSide(color: Color(0xFFDDD6FE)),
+              foregroundColor: const Color(0xFF8B5CF6),
+              side: const BorderSide(color: Color(0xFF2D3050)),
               padding: const EdgeInsets.symmetric(vertical: 14),
               minimumSize: const Size(double.infinity, 48),
               shape: RoundedRectangleBorder(
@@ -691,7 +734,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
                 ),
               ),
               const SizedBox(width: 10),
-              const Icon(Icons.arrow_forward_rounded, color: Color(0xFF7C4DFF)),
+              const Icon(Icons.arrow_forward_rounded, color: Color(0xFF8B5CF6)),
               const SizedBox(width: 10),
               Expanded(
                 child: _buildZoneDropdown(
@@ -706,7 +749,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
             width: double.infinity,
             padding: const EdgeInsets.all(15),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: _surfaceSoft,
               borderRadius: BorderRadius.circular(18),
             ),
             child: Column(
@@ -715,7 +758,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
                 Text(
                   'Waktu asal: $originalText',
                   style: const TextStyle(
-                    color: Color(0xFF6B7280),
+                    color: Color(0xFFB8BCD7),
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
@@ -724,7 +767,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
                 Text(
                   'Hasil konversi: $converted',
                   style: const TextStyle(
-                    color: Color(0xFF00A86B),
+                    color: Color(0xFF34D399),
                     fontSize: 15,
                     fontWeight: FontWeight.w900,
                   ),
@@ -749,9 +792,9 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F7FB),
+        color: const Color(0xFF17182C),
         borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: const Color(0xFFEDEDF5)),
+        border: Border.all(color: const Color(0xFF2D3050)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -775,7 +818,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
                     Text(
                       'Rencana $selectedPractice',
                       style: const TextStyle(
-                        color: Color(0xFF20243A),
+                        color: Color(0xFFF8FAFC),
                         fontSize: 19,
                         fontWeight: FontWeight.w900,
                       ),
@@ -784,7 +827,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
                     Text(
                       '${_formatDate(selectedDate)} • ${_formatTime(selectedTime)} $selectedZone',
                       style: const TextStyle(
-                        color: Color(0xFF6B7280),
+                        color: Color(0xFFB8BCD7),
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
                       ),
@@ -814,7 +857,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
           Text(
             'Fokus: ${plan['focus']}',
             style: const TextStyle(
-              color: Color(0xFF4B5563),
+              color: Color(0xFFDDE2FF),
               fontSize: 13,
               height: 1.45,
               fontWeight: FontWeight.w700,
@@ -824,7 +867,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
           const Text(
             'Konversi waktu jadwal ini',
             style: TextStyle(
-              color: Color(0xFF20243A),
+              color: Color(0xFFF8FAFC),
               fontSize: 14,
               fontWeight: FontWeight.w900,
             ),
@@ -854,7 +897,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFFEFF6FF), Color(0xFFF3E8FF)],
+          colors: [Color(0xFF17182C), Color(0xFF251640)],
         ),
         borderRadius: BorderRadius.circular(28),
       ),
@@ -864,7 +907,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
           const Text(
             'Jadwalku',
             style: TextStyle(
-              color: Color(0xFF20243A),
+              color: Color(0xFFF8FAFC),
               fontSize: 20,
               fontWeight: FontWeight.w900,
             ),
@@ -873,7 +916,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
           const Text(
             'Setiap jadwal menyimpan tanggal dan zona asli. Kamu bisa mengubah tampilan konversi per jadwal tanpa mengubah reminder.',
             style: TextStyle(
-              color: Color(0xFF6B7280),
+              color: Color(0xFFB8BCD7),
               fontSize: 13,
               height: 1.45,
               fontWeight: FontWeight.w600,
@@ -885,13 +928,13 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(15),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.82),
+                color: const Color(0xFF232542).withValues(alpha: 0.92),
                 borderRadius: BorderRadius.circular(18),
               ),
               child: const Text(
                 'Belum ada jadwal tersimpan. Buat jadwal latihan pertama, lalu reminder otomatis akan aktif.',
                 style: TextStyle(
-                  color: Color(0xFF7C7E8A),
+                  color: Color(0xFFB8BCD7),
                   fontSize: 13,
                   height: 1.4,
                   fontWeight: FontWeight.w600,
@@ -936,7 +979,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
 
     final plan = practiceCatalog[practice];
     final color = plan == null
-        ? const Color(0xFF7C4DFF)
+        ? const Color(0xFF8B5CF6)
         : plan['color'] as Color;
     final icon = plan == null
         ? Icons.event_note_rounded
@@ -946,9 +989,11 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.88),
+        color: const Color(0xFF232542).withValues(alpha: 0.94),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.7)),
+        border: Border.all(
+          color: const Color(0xFF2D3050).withValues(alpha: 0.90),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -970,7 +1015,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
                 Text(
                   '$practice • $target',
                   style: const TextStyle(
-                    color: Color(0xFF20243A),
+                    color: Color(0xFFF8FAFC),
                     fontSize: 15,
                     fontWeight: FontWeight.w900,
                   ),
@@ -979,7 +1024,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
                 Text(
                   converted,
                   style: const TextStyle(
-                    color: Color(0xFF00A86B),
+                    color: Color(0xFF34D399),
                     fontSize: 13,
                     fontWeight: FontWeight.w900,
                   ),
@@ -988,7 +1033,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
                 Text(
                   'Jadwal asli: ${_formatDate(original)} • ${_formatTimeFromParts(hour, minute)} $zone',
                   style: const TextStyle(
-                    color: Color(0xFF6B7280),
+                    color: Color(0xFFB8BCD7),
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
@@ -997,7 +1042,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
                 Text(
                   'Reminder HP: $reminder',
                   style: const TextStyle(
-                    color: Color(0xFF5E35B1),
+                    color: Color(0xFF8B5CF6),
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
                   ),
@@ -1006,9 +1051,9 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF7F7FB),
+                    color: const Color(0xFF17182C),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFE6E2FF)),
+                    border: Border.all(color: const Color(0xFF2D3050)),
                   ),
                   child: DropdownButton<String>(
                     value: displayZone,
@@ -1036,7 +1081,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      color: Color(0xFF7C7E8A),
+                      color: Color(0xFFB8BCD7),
                       fontSize: 12,
                       height: 1.35,
                       fontWeight: FontWeight.w600,
@@ -1049,7 +1094,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
           IconButton(
             onPressed: () => _removeSchedule(schedule),
             icon: const Icon(Icons.delete_outline_rounded),
-            color: const Color(0xFFE85D75),
+            color: const Color(0xFFF472B6),
             tooltip: 'Hapus jadwal',
           ),
         ],
@@ -1057,7 +1102,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
     );
   }
 
-  static const Color _bgColor = Color(0xFFFCFCFE);
+  static const Color _bgColor = Color(0xFF0B0D22);
 
   @override
   Widget build(BuildContext context) {
@@ -1070,11 +1115,11 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
         title: const Text(
           'Smart Practice Scheduler',
           style: TextStyle(
-            color: Color(0xFF20243A),
+            color: Color(0xFFF8FAFC),
             fontWeight: FontWeight.w900,
           ),
         ),
-        iconTheme: const IconThemeData(color: Color(0xFF20243A)),
+        iconTheme: const IconThemeData(color: Color(0xFFF8FAFC)),
       ),
       body: SafeArea(
         child: ListView(
@@ -1085,7 +1130,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
               style: TextStyle(
                 fontSize: 14,
                 height: 1.5,
-                color: Color(0xFF7C7E8A),
+                color: Color(0xFFB8BCD7),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -1131,8 +1176,8 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
                 icon: const Icon(Icons.calendar_month_rounded),
                 label: Text('Pilih tanggal: ${_formatDate(selectedDate)}'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF5E35B1),
-                  side: const BorderSide(color: Color(0xFFDDD6FE)),
+                  foregroundColor: const Color(0xFF8B5CF6),
+                  side: const BorderSide(color: Color(0xFF2D3050)),
                   padding: const EdgeInsets.symmetric(vertical: 15),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(18),
@@ -1150,8 +1195,8 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
                   'Pilih jam latihan: ${_formatTime(selectedTime)} $selectedZone',
                 ),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF5E35B1),
-                  side: const BorderSide(color: Color(0xFFDDD6FE)),
+                  foregroundColor: const Color(0xFF8B5CF6),
+                  side: const BorderSide(color: Color(0xFF2D3050)),
                   padding: const EdgeInsets.symmetric(vertical: 15),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(18),
@@ -1172,7 +1217,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
                         height: 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: _surfaceSoft,
                         ),
                       )
                     : const Icon(Icons.save_rounded),
@@ -1180,7 +1225,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
                   isSaving ? 'Menyimpan...' : 'Simpan Jadwal & Reminder',
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF7C4DFF),
+                  backgroundColor: const Color(0xFF8B5CF6),
                   foregroundColor: Colors.white,
                   disabledBackgroundColor: const Color(0xFFB7A8FF),
                   elevation: 0,

@@ -1,8 +1,4 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 import '../../../services/exchange_rate_service.dart';
 import '../../../services/practice_progress_service.dart';
 
@@ -14,19 +10,30 @@ class InstrumentPricesScreen extends StatefulWidget {
 }
 
 class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
-  static const String _savedInterestKey = 'saved_instrument_interests';
+  static const Color _bg = Color(0xFF0B0D22);
+  static const Color _surface = Color(0xFF17182C);
+  static const Color _surfaceSoft = Color(0xFF232542);
+  static const Color _border = Color(0xFF2D3050);
+  static const Color _text = Color(0xFFF8FAFC);
+  static const Color _muted = Color(0xFFB8BCD7);
+  static const Color _purple = Color(0xFF8B5CF6);
+  static const Color _cyan = Color(0xFF22D3EE);
+  static const Color _pink = Color(0xFFF472B6);
+  static const Color _green = Color(0xFF34D399);
 
-  String selectedCurrency = 'IDR';
+  String selectedCurrency = 'USD';
   bool isLoadingRates = true;
   bool isUsingFallbackRates = false;
-  String rateStatusText = 'Menyiapkan estimasi biaya alat musik...';
+  String rateStatusText = 'Menyiapkan estimasi biaya...';
 
   int selectedInstrumentIndex = 0;
   List<Map<String, dynamic>> savedInterests = [];
 
   final TextEditingController manualPriceController = TextEditingController(
-    text: '1500000',
+    text: '1.500.000',
   );
+
+  bool isFormattingManualPrice = false;
 
   Map<String, double> exchangeRates = {
     'IDR': 1,
@@ -44,22 +51,6 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
     'THB': 0.0022,
     'PHP': 0.0035,
     'INR': 0.0051,
-    'HKD': 0.00048,
-    'NZD': 0.00010,
-    'SEK': 0.00067,
-    'NOK': 0.00068,
-    'DKK': 0.00043,
-    'PLN': 0.00025,
-    'CZK': 0.0014,
-    'HUF': 0.023,
-    'TRY': 0.0020,
-    'ZAR': 0.0011,
-    'BRL': 0.00034,
-    'MXN': 0.0011,
-    'ILS': 0.00023,
-    'RON': 0.00029,
-    'BGN': 0.00011,
-    'ISK': 0.0085,
   };
 
   final List<Map<String, dynamic>> instruments = [
@@ -84,8 +75,7 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
       'category': 'Bass',
       'price': 2600000.0,
       'icon': Icons.album_rounded,
-      'description':
-          'Instrumen low-end untuk groove, band, dan rhythm section.',
+      'description': 'Instrumen low-end untuk groove dan rhythm section.',
       'practice': 'Latihan tempo, root note, groove, dan sinkron dengan drum.',
     },
     {
@@ -101,8 +91,7 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
       'category': 'Keyboard',
       'price': 2200000.0,
       'icon': Icons.queue_music_rounded,
-      'description':
-          'Praktis untuk belajar iringan, aransemen, dan produksi musik.',
+      'description': 'Praktis untuk belajar iringan dan aransemen sederhana.',
       'practice': 'Latihan rhythm style, chord, dan lagu sederhana.',
     },
     {
@@ -119,8 +108,7 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
       'category': 'String',
       'price': 650000.0,
       'icon': Icons.music_note_rounded,
-      'description':
-          'Ringan, mudah dibawa, dan cocok untuk pengiring lagu santai.',
+      'description': 'Ringan, mudah dibawa, dan cocok untuk pengiring lagu.',
       'practice': 'Latihan chord sederhana, strumming ringan, dan tempo.',
     },
     {
@@ -128,20 +116,8 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
       'category': 'Drum',
       'price': 4500000.0,
       'icon': Icons.adjust_rounded,
-      'description':
-          'Alternatif drum hemat ruang untuk latihan rhythm di rumah.',
-      'practice':
-          'Latihan beat dasar, fill-in, tempo, dan koordinasi tangan kaki.',
-    },
-    {
-      'name': 'Cajon',
-      'category': 'Perkusi',
-      'price': 750000.0,
-      'icon': Icons.grid_view_rounded,
-      'description':
-          'Perkusi akustik ringkas untuk latihan rhythm dan perform live.',
-      'practice':
-          'Latihan pola kick-snare, groove akustik, dan dinamika pukulan.',
+      'description': 'Alternatif drum hemat ruang untuk latihan rhythm.',
+      'practice': 'Latihan beat dasar, fill-in, tempo, dan koordinasi.',
     },
     {
       'name': 'Mic Condenser',
@@ -157,26 +133,15 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
       'category': 'Recording',
       'price': 1450000.0,
       'icon': Icons.settings_input_component_rounded,
-      'description':
-          'Perangkat penting untuk rekaman vokal atau instrumen ke laptop.',
-      'practice': 'Latihan rekaman take vokal/gitar dan evaluasi hasil suara.',
-    },
-    {
-      'name': 'Studio Monitor',
-      'category': 'Audio',
-      'price': 3000000.0,
-      'icon': Icons.speaker_rounded,
-      'description':
-          'Speaker referensi untuk mixing, produksi, dan evaluasi audio.',
-      'practice': 'Latihan mendengar detail frekuensi dan balancing suara.',
+      'description': 'Perangkat penting untuk rekaman vokal atau instrumen.',
+      'practice': 'Latihan rekaman take vokal/gitar dan evaluasi hasil.',
     },
     {
       'name': 'Headphone Monitoring',
       'category': 'Audio',
       'price': 850000.0,
       'icon': Icons.headphones_rounded,
-      'description':
-          'Membantu latihan rekaman, editing audio, dan fokus mendengar nada.',
+      'description': 'Membantu latihan rekaman, editing, dan fokus nada.',
       'practice': 'Latihan ear training, preview musik, dan monitoring vokal.',
     },
     {
@@ -184,17 +149,8 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
       'category': 'Melodi',
       'price': 250000.0,
       'icon': Icons.auto_awesome_rounded,
-      'description':
-          'Instrumen kecil dengan suara lembut untuk latihan melodi ringan.',
+      'description': 'Instrumen kecil dengan suara lembut untuk melodi ringan.',
       'practice': 'Latihan melodi sederhana dan pendengaran interval.',
-    },
-    {
-      'name': 'Harmonika',
-      'category': 'Tiup',
-      'price': 180000.0,
-      'icon': Icons.air_rounded,
-      'description': 'Instrumen tiup kecil untuk latihan napas dan melodi.',
-      'practice': 'Latihan napas, melodi pendek, dan kontrol nada.',
     },
   ];
 
@@ -206,6 +162,34 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
     super.initState();
     _loadExchangeRates();
     _loadSavedInterests();
+
+    manualPriceController.addListener(_formatManualPriceInput);
+  }
+
+  void _formatManualPriceInput() {
+    if (isFormattingManualPrice) return;
+
+    final digits = manualPriceController.text.replaceAll(RegExp(r'[^0-9]'), '');
+
+    final formatted = digits.isEmpty
+        ? ''
+        : _formatWithSeparators(digits, separator: '.');
+
+    if (manualPriceController.text == formatted) {
+      if (mounted) setState(() {});
+      return;
+    }
+
+    isFormattingManualPrice = true;
+
+    manualPriceController.value = TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+
+    isFormattingManualPrice = false;
+
+    if (mounted) setState(() {});
   }
 
   @override
@@ -217,7 +201,7 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
   Future<void> _loadExchangeRates() async {
     setState(() {
       isLoadingRates = true;
-      rateStatusText = 'Menyiapkan estimasi biaya alat musik...';
+      rateStatusText = 'Menyiapkan estimasi biaya...';
     });
 
     try {
@@ -227,13 +211,12 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
 
       setState(() {
         exchangeRates = latestRates;
-        if (!exchangeRates.containsKey(selectedCurrency)) {
-          selectedCurrency = 'IDR';
-        }
+        selectedCurrency = exchangeRates.containsKey(selectedCurrency)
+            ? selectedCurrency
+            : 'USD';
         isLoadingRates = false;
         isUsingFallbackRates = false;
-        rateStatusText =
-            'Estimasi biaya global siap digunakan untuk rencana pembelian alat musik.';
+        rateStatusText = 'Kurs berhasil diperbarui.';
       });
     } catch (_) {
       if (!mounted) return;
@@ -242,59 +225,40 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
         isLoadingRates = false;
         isUsingFallbackRates = true;
         rateStatusText =
-            'Mode estimasi aktif. Kurs cadangan dipakai agar perhitungan tetap berjalan.';
+            'Kurs cadangan digunakan agar konversi tetap berjalan.';
       });
     }
   }
 
   Future<void> _loadSavedInterests() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_savedInterestKey);
+    final interests = await PracticeProgressService.getInstrumentInterests();
 
-    if (raw == null || raw.trim().isEmpty) return;
+    if (!mounted) return;
 
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! List) return;
-
-      if (!mounted) return;
-
-      setState(() {
-        savedInterests = decoded
-            .whereType<Map>()
-            .map((item) => Map<String, dynamic>.from(item))
-            .toList();
-      });
-    } catch (_) {
-      return;
-    }
+    setState(() {
+      savedInterests = interests;
+    });
   }
 
   Future<void> _persistSavedInterests() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_savedInterestKey, jsonEncode(savedInterests));
+    await PracticeProgressService.saveInstrumentInterests(savedInterests);
   }
 
-  String _formatNumber(double value, {int decimals = 0}) {
-    final fixed = value.toStringAsFixed(decimals);
-    final parts = fixed.split('.');
-    final number = parts.first;
-    final buffer = StringBuffer();
+  void _useSelectedInstrumentPrice() {
+    final price = selectedInstrument['price'] as double;
+    final digits = price.round().toString();
 
-    for (int i = 0; i < number.length; i++) {
-      final positionFromEnd = number.length - i;
-      buffer.write(number[i]);
+    manualPriceController.text = _formatWithSeparators(digits, separator: '.');
+  }
 
-      if (positionFromEnd > 1 && positionFromEnd % 3 == 1) {
-        buffer.write(',');
-      }
-    }
+  BigInt _manualIdrAmount() {
+    final onlyDigits = manualPriceController.text.replaceAll(
+      RegExp(r'[^0-9]'),
+      '',
+    );
 
-    if (decimals > 0 && parts.length > 1) {
-      return '${buffer.toString()}.${parts.last}';
-    }
-
-    return buffer.toString();
+    if (onlyDigits.isEmpty) return BigInt.zero;
+    return BigInt.tryParse(onlyDigits) ?? BigInt.zero;
   }
 
   int _decimalsForCurrency(String currency) {
@@ -302,20 +266,69 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
     return 2;
   }
 
-  String _convertPrice(double idrPrice, {String? currency}) {
-    final targetCurrency = currency ?? selectedCurrency;
+  String _formatWithSeparators(
+    String integerPart, {
+    required String separator,
+  }) {
+    final buffer = StringBuffer();
 
-    if (targetCurrency == 'IDR') {
-      return 'IDR ${_formatNumber(idrPrice)}';
+    for (int i = 0; i < integerPart.length; i++) {
+      final positionFromEnd = integerPart.length - i;
+      buffer.write(integerPart[i]);
+
+      if (positionFromEnd > 1 && positionFromEnd % 3 == 1) {
+        buffer.write(separator);
+      }
     }
 
-    final rate = exchangeRates[targetCurrency];
-    if (rate == null) return '$targetCurrency -';
+    return buffer.toString();
+  }
 
-    final converted = idrPrice * rate;
-    final decimals = _decimalsForCurrency(targetCurrency);
+  String _formatMoneyValue(
+    double value,
+    String currency, {
+    bool withCode = true,
+  }) {
+    final decimals = _decimalsForCurrency(currency);
+    final fixed = value.toStringAsFixed(decimals);
+    final parts = fixed.split('.');
+    final integerPart = parts.first;
+    final decimalPart = parts.length > 1 ? parts.last : '';
 
-    return '$targetCurrency ${_formatNumber(converted, decimals: decimals)}';
+    final useIndonesianSeparator =
+        currency == 'IDR' || currency == 'JPY' || currency == 'KRW';
+
+    final thousandsSeparator = useIndonesianSeparator ? '.' : ',';
+    final decimalSeparator = useIndonesianSeparator ? ',' : '.';
+
+    final formattedInteger = _formatWithSeparators(
+      integerPart,
+      separator: thousandsSeparator,
+    );
+
+    final formatted = decimals == 0
+        ? formattedInteger
+        : '$formattedInteger$decimalSeparator$decimalPart';
+
+    return withCode ? '$currency $formatted' : formatted;
+  }
+
+  String _formatBigIntIdr(BigInt value) {
+    return 'IDR ${_formatWithSeparators(value.toString(), separator: '.')}';
+  }
+
+  String _convertManualAmount(String currency) {
+    final amount = _manualIdrAmount();
+
+    if (currency == 'IDR') {
+      return _formatBigIntIdr(amount);
+    }
+
+    final rate = exchangeRates[currency];
+    if (rate == null) return '$currency -';
+
+    final converted = amount.toDouble() * rate;
+    return _formatMoneyValue(converted, currency);
   }
 
   bool _isInterestSaved(String name) {
@@ -325,21 +338,33 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
   Future<void> _saveSelectedInterest() async {
     final item = selectedInstrument;
     final name = item['name'] as String;
-    final price = item['price'] as double;
+    final category = item['category'] as String;
     final description = item['description'] as String;
     final practice = item['practice'] as String;
-    final category = item['category'] as String;
-    final convertedPrice = _convertPrice(price);
+    final price = _manualIdrAmount();
+
+    if (price <= BigInt.zero) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Masukkan estimasi biaya terlebih dahulu.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final convertedPrice = _convertManualAmount(selectedCurrency);
 
     final savedItem = {
       'name': name,
       'category': category,
-      'price': price,
+      'price': price.toString(),
       'converted_price': convertedPrice,
       'currency': selectedCurrency,
       'description': description,
       'practice': practice,
       'saved_at': DateTime.now().toIso8601String(),
+      'storage': 'Hive',
     };
 
     setState(() {
@@ -359,14 +384,13 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
       metadata: {
         'instrument_name': name,
         'category': category,
-        'estimated_price_idr': price,
+        'estimated_price_idr': price.toString(),
         'converted_price': convertedPrice,
         'currency': selectedCurrency,
         'description': description,
         'practice': practice,
-        'rate_source': isUsingFallbackRates
-            ? 'Mode estimasi cadangan'
-            : 'Estimasi kurs global',
+        'rate_source': isUsingFallbackRates ? 'Kurs cadangan' : 'Kurs online',
+        'storage': 'Hive',
       },
     );
 
@@ -374,7 +398,7 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('$name tersimpan di Minat Tersimpan.'),
+        content: Text('$name tersimpan.'),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -391,138 +415,29 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('$name dihapus dari Minat Tersimpan.'),
+        content: Text('$name dihapus.'),
         behavior: SnackBarBehavior.floating,
       ),
     );
   }
 
-  BigInt _manualIdrAmount() {
-    final onlyDigits = manualPriceController.text.replaceAll(
-      RegExp(r'[^0-9]'),
-      '',
-    );
-
-    if (onlyDigits.isEmpty) return BigInt.zero;
-
-    return BigInt.tryParse(onlyDigits) ?? BigInt.zero;
-  }
-
-  String _formatBigInt(BigInt value) {
-    final raw = value.toString();
-    final buffer = StringBuffer();
-
-    for (int i = 0; i < raw.length; i++) {
-      final positionFromEnd = raw.length - i;
-      buffer.write(raw[i]);
-
-      if (positionFromEnd > 1 && positionFromEnd % 3 == 1) {
-        buffer.write(',');
-      }
-    }
-
-    return buffer.toString();
-  }
-
-  String _convertBigIntPrice(BigInt idrAmount, {String? currency}) {
-    final targetCurrency = currency ?? selectedCurrency;
-
-    if (targetCurrency == 'IDR') {
-      return 'IDR ${_formatBigInt(idrAmount)}';
-    }
-
-    final rate = exchangeRates[targetCurrency];
-    if (rate == null) return '$targetCurrency -';
-
-    const scaleInt = 100000000;
-    final scale = BigInt.from(scaleInt);
-    final scaledRate = BigInt.from((rate * scaleInt).round());
-
-    final convertedScaled = idrAmount * scaledRate;
-    final whole = convertedScaled ~/ scale;
-    final remainder = convertedScaled % scale;
-
-    final decimals = _decimalsForCurrency(targetCurrency);
-    if (decimals == 0) {
-      return '$targetCurrency ${_formatBigInt(whole)}';
-    }
-
-    final decimalDivider = BigInt.from(10).pow(8 - decimals);
-    final fraction = (remainder ~/ decimalDivider).toString().padLeft(
-      decimals,
-      '0',
-    );
-
-    return '$targetCurrency ${_formatBigInt(whole)}.$fraction';
-  }
-
-  Widget _buildManualConverterCard() {
-    final amount = _manualIdrAmount();
-
+  Widget _darkCard({required Widget child, EdgeInsets? padding}) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      width: double.infinity,
+      padding: padding ?? const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F7FB),
+        color: _surface,
         borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: const Color(0xFFEDEDF5)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Estimasi Biaya Custom',
-            style: TextStyle(
-              color: Color(0xFF20243A),
-              fontSize: 19,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 7),
-          const Text(
-            'Masukkan perkiraan harga alat musik dalam rupiah, lalu lihat estimasi nilainya dalam mata uang pilihan.',
-            style: TextStyle(
-              color: Color(0xFF6B7280),
-              fontSize: 13,
-              height: 1.45,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: manualPriceController,
-            keyboardType: TextInputType.number,
-            onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-              labelText: 'Perkiraan harga IDR',
-              hintText: 'Contoh: 1500000',
-              prefixIcon: const Icon(Icons.payments_rounded),
-              filled: true,
-              fillColor: Colors.white,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(18),
-                borderSide: BorderSide.none,
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(15),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Text(
-              'Estimasi dalam mata uang pilihan: ${_convertBigIntPrice(amount)}',
-              style: const TextStyle(
-                color: Color(0xFF20243A),
-                fontSize: 15,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
+        border: Border.all(color: _border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.24),
+            blurRadius: 22,
+            offset: const Offset(0, 12),
           ),
         ],
       ),
+      child: child,
     );
   }
 
@@ -531,13 +446,13 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: isUsingFallbackRates
-            ? const Color(0xFFFFF4E8)
-            : const Color(0xFFEFFAF4),
+            ? const Color(0xFF2A1F16)
+            : const Color(0xFF12251F),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: isUsingFallbackRates
-              ? const Color(0xFFFFD6A5)
-              : const Color(0xFFCDEEDB),
+              ? const Color(0xFF5B3A16)
+              : const Color(0xFF245C46),
         ),
       ),
       child: Row(
@@ -553,9 +468,7 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
               isUsingFallbackRates
                   ? Icons.info_outline_rounded
                   : Icons.public_rounded,
-              color: isUsingFallbackRates
-                  ? const Color(0xFFB45309)
-                  : const Color(0xFF00A86B),
+              color: isUsingFallbackRates ? const Color(0xFFFBBF24) : _green,
               size: 22,
             ),
           const SizedBox(width: 12),
@@ -564,8 +477,8 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
               rateStatusText,
               style: TextStyle(
                 color: isUsingFallbackRates
-                    ? const Color(0xFF92400E)
-                    : const Color(0xFF166534),
+                    ? const Color(0xFFFFE7A8)
+                    : const Color(0xFFC4F1E2),
                 fontSize: 12,
                 height: 1.35,
                 fontWeight: FontWeight.w700,
@@ -575,44 +488,10 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
           IconButton(
             onPressed: isLoadingRates ? null : _loadExchangeRates,
             icon: const Icon(Icons.refresh_rounded),
-            color: const Color(0xFF5E35B1),
-            tooltip: 'Perbarui estimasi kurs',
+            color: _cyan,
+            tooltip: 'Perbarui kurs',
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildCurrencyDropdown() {
-    final currencies = ExchangeRateService.supportedCurrencies
-        .where((currency) => exchangeRates.containsKey(currency))
-        .toList();
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: DropdownButton<String>(
-        value: currencies.contains(selectedCurrency) ? selectedCurrency : 'IDR',
-        isExpanded: true,
-        underline: const SizedBox(),
-        borderRadius: BorderRadius.circular(16),
-        items: currencies
-            .map(
-              (currency) =>
-                  DropdownMenuItem(value: currency, child: Text(currency)),
-            )
-            .toList(),
-        onChanged: (value) {
-          if (value != null) {
-            setState(() {
-              selectedCurrency = value;
-            });
-          }
-        },
       ),
     );
   }
@@ -634,22 +513,24 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
               setState(() {
                 selectedInstrumentIndex = index;
               });
+              _useSelectedInstrumentPrice();
             },
             borderRadius: BorderRadius.circular(22),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
-              width: 150,
+              width: 154,
               padding: const EdgeInsets.all(13),
               decoration: BoxDecoration(
-                color: selected
-                    ? const Color(0xFF7C4DFF)
-                    : const Color(0xFFF7F7FB),
+                gradient: selected
+                    ? const LinearGradient(
+                        colors: [_purple, _cyan],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      )
+                    : null,
+                color: selected ? null : _surface,
                 borderRadius: BorderRadius.circular(22),
-                border: Border.all(
-                  color: selected
-                      ? const Color(0xFF7C4DFF)
-                      : const Color(0xFFEDEDF5),
-                ),
+                border: Border.all(color: selected ? _cyan : _border),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -658,18 +539,14 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
                     children: [
                       Icon(
                         item['icon'] as IconData,
-                        color: selected
-                            ? Colors.white
-                            : const Color(0xFF7C4DFF),
+                        color: Colors.white,
                         size: 25,
                       ),
                       const Spacer(),
                       if (saved)
-                        Icon(
+                        const Icon(
                           Icons.bookmark_rounded,
-                          color: selected
-                              ? Colors.white
-                              : const Color(0xFF00A86B),
+                          color: _green,
                           size: 20,
                         ),
                     ],
@@ -679,8 +556,8 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
                     item['name'].toString(),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: selected ? Colors.white : const Color(0xFF20243A),
+                    style: const TextStyle(
+                      color: _text,
                       fontSize: 14,
                       fontWeight: FontWeight.w900,
                       height: 1.2,
@@ -689,10 +566,8 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
                   const SizedBox(height: 4),
                   Text(
                     item['category'].toString(),
-                    style: TextStyle(
-                      color: selected
-                          ? Colors.white.withValues(alpha: 0.75)
-                          : const Color(0xFF7C7E8A),
+                    style: const TextStyle(
+                      color: _muted,
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                     ),
@@ -710,19 +585,8 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
     final item = selectedInstrument;
     final name = item['name'] as String;
     final price = item['price'] as double;
-    final saved = _isInterestSaved(name);
 
-    final previewCurrencies = ExchangeRateService.supportedCurrencies
-        .where((currency) => exchangeRates.containsKey(currency))
-        .toList();
-
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F7FB),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: const Color(0xFFEDEDF5)),
-      ),
+    return _darkCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -733,7 +597,9 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
                 height: 58,
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF7C4DFF), Color(0xFF5E35B1)],
+                    colors: [_purple, _cyan],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
                   borderRadius: BorderRadius.circular(20),
                 ),
@@ -751,8 +617,8 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
                     Text(
                       name,
                       style: const TextStyle(
-                        color: Color(0xFF20243A),
-                        fontSize: 19,
+                        color: _text,
+                        fontSize: 20,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
@@ -760,7 +626,7 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
                     Text(
                       item['category'].toString(),
                       style: const TextStyle(
-                        color: Color(0xFF7C7E8A),
+                        color: _muted,
                         fontSize: 12,
                         fontWeight: FontWeight.w800,
                       ),
@@ -774,7 +640,7 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
           Text(
             item['description'].toString(),
             style: const TextStyle(
-              color: Color(0xFF6B7280),
+              color: _muted,
               fontSize: 13,
               height: 1.45,
               fontWeight: FontWeight.w600,
@@ -782,9 +648,9 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Estimasi utama: ${_convertPrice(price)}',
+            'Harga rekomendasi: ${_formatMoneyValue(price, 'IDR')}',
             style: const TextStyle(
-              color: Color(0xFF00A86B),
+              color: _green,
               fontSize: 17,
               fontWeight: FontWeight.w900,
             ),
@@ -794,119 +660,282 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
             width: double.infinity,
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: _surfaceSoft,
               borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: _border),
             ),
             child: Text(
               'Arah latihan: ${item['practice']}',
               style: const TextStyle(
-                color: Color(0xFF4B5563),
+                color: _muted,
                 fontSize: 13,
                 height: 1.4,
                 fontWeight: FontWeight.w700,
               ),
             ),
           ),
-          const SizedBox(height: 14),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildManualConverterCard() {
+    final amount = _manualIdrAmount();
+
+    return _darkCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           const Text(
-            'Konversi semua mata uang',
+            'Estimasi Biaya',
             style: TextStyle(
-              color: Color(0xFF20243A),
-              fontSize: 15,
+              color: _text,
+              fontSize: 20,
               fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: previewCurrencies.map((currency) {
-              return Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: currency == selectedCurrency
-                      ? const Color(0xFF7C4DFF)
-                      : Colors.white,
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: const Color(0xFFE6E2FF)),
-                ),
-                child: Text(
-                  _convertPrice(price, currency: currency),
-                  style: TextStyle(
-                    color: currency == selectedCurrency
-                        ? Colors.white
-                        : const Color(0xFF4B4E63),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              );
-            }).toList(),
+          const SizedBox(height: 7),
+          const Text(
+            'Masukkan nominal dalam IDR. Hasil konversi langsung muncul di bawah.',
+            style: TextStyle(
+              color: _muted,
+              fontSize: 13,
+              height: 1.45,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-          const SizedBox(height: 16),
-          SizedBox(
+          const SizedBox(height: 14),
+          TextField(
+            controller: manualPriceController,
+            keyboardType: TextInputType.number,
+            style: const TextStyle(
+              color: _text,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+            decoration: InputDecoration(
+              labelText: 'Nominal IDR',
+              hintText: 'Contoh: 1500000',
+              prefixIcon: const Icon(Icons.payments_rounded),
+              suffixIcon: IconButton(
+                onPressed: _useSelectedInstrumentPrice,
+                icon: const Icon(Icons.restart_alt_rounded),
+                tooltip: 'Pakai harga rekomendasi',
+              ),
+              filled: true,
+              fillColor: _surfaceSoft,
+              labelStyle: const TextStyle(color: _muted),
+              hintStyle: const TextStyle(color: Color(0xFF7E84A8)),
+              prefixIconColor: _cyan,
+              suffixIconColor: _cyan,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Container(
             width: double.infinity,
-            height: 52,
-            child: saved
-                ? OutlinedButton.icon(
-                    onPressed: () => _removeInterest(name),
-                    icon: const Icon(Icons.bookmark_remove_rounded),
-                    label: const Text('Hapus dari Minat Tersimpan'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFFE85D75),
-                      side: const BorderSide(color: Color(0xFFFFCDD2)),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(17),
-                      ),
-                    ),
-                  )
-                : ElevatedButton.icon(
-                    onPressed: _saveSelectedInterest,
-                    icon: const Icon(Icons.bookmark_add_rounded),
-                    label: const Text('Simpan ke Minat Tersimpan'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF7C4DFF),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(17),
-                      ),
-                    ),
-                  ),
+            padding: const EdgeInsets.all(15),
+            decoration: BoxDecoration(
+              color: _surfaceSoft,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: _border),
+            ),
+            child: Text(
+              'Dasar konversi: ${_formatBigIntIdr(amount)}',
+              style: const TextStyle(
+                color: _green,
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSavedInterestsSection() {
+  Widget _buildCurrencyDropdown() {
+    final currencies = ExchangeRateService.supportedCurrencies
+        .where((currency) => exchangeRates.containsKey(currency))
+        .toList();
+
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFFFF0F7), Color(0xFFF3E8FF)],
-        ),
-        borderRadius: BorderRadius.circular(28),
+        color: _surfaceSoft,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _border),
       ),
+      child: DropdownButton<String>(
+        value: currencies.contains(selectedCurrency) ? selectedCurrency : 'USD',
+        isExpanded: true,
+        dropdownColor: _surfaceSoft,
+        underline: const SizedBox(),
+        borderRadius: BorderRadius.circular(16),
+        iconEnabledColor: _cyan,
+        style: const TextStyle(color: _text, fontWeight: FontWeight.w800),
+        items: currencies
+            .where((currency) => currency != 'IDR')
+            .map(
+              (currency) =>
+                  DropdownMenuItem(value: currency, child: Text(currency)),
+            )
+            .toList(),
+        onChanged: (value) {
+          if (value != null) {
+            setState(() {
+              selectedCurrency = value;
+            });
+          }
+        },
+      ),
+    );
+  }
+
+  Widget _buildConversionResultCard() {
+    final amount = _manualIdrAmount();
+    final currencies = ExchangeRateService.supportedCurrencies
+        .where((currency) => exchangeRates.containsKey(currency))
+        .where((currency) => currency != 'IDR')
+        .take(12)
+        .toList();
+
+    return _darkCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Hasil Konversi',
+            style: TextStyle(
+              color: _text,
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            amount == BigInt.zero
+                ? 'Isi nominal IDR untuk melihat hasil konversi.'
+                : '${_formatBigIntIdr(amount)} dikonversi ke beberapa mata uang.',
+            style: const TextStyle(
+              color: _muted,
+              fontSize: 13,
+              height: 1.45,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Konversi utama',
+                  style: TextStyle(
+                    color: _muted,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              SizedBox(width: 126, child: _buildCurrencyDropdown()),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [_purple, _cyan],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              'IDR → $selectedCurrency  •  ${_convertManualAmount(selectedCurrency)}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          ...currencies.map((currency) {
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: _surfaceSoft,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: currency == selectedCurrency ? _cyan : _border,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 72,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: currency == selectedCurrency
+                          ? _cyan.withValues(alpha: 0.18)
+                          : _bg.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Text(
+                      'IDR → $currency',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: currency == selectedCurrency ? _cyan : _muted,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _convertManualAmount(currency),
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        color: _text,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSavedInterestsSection() {
+    return _darkCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
             'Minat Tersimpan',
             style: TextStyle(
-              color: Color(0xFF20243A),
-              fontSize: 19,
+              color: _text,
+              fontSize: 20,
               fontWeight: FontWeight.w900,
             ),
           ),
           const SizedBox(height: 7),
           const Text(
-            'Alat yang kamu simpan akan tampil di sini dan tetap tercatat di History sebagai rencana pembelian.',
+            'Alat musik yang kamu simpan akan tersimpan di database lokal Hive.',
             style: TextStyle(
-              color: Color(0xFF6B7280),
+              color: _muted,
               fontSize: 13,
               height: 1.45,
               fontWeight: FontWeight.w600,
@@ -916,43 +945,34 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
           if (savedInterests.isEmpty)
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(15),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.75),
+                color: _surfaceSoft,
                 borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: _border),
               ),
               child: const Text(
-                'Belum ada alat tersimpan. Pilih salah satu alat, lalu tekan Simpan ke Minat Tersimpan.',
-                style: TextStyle(
-                  color: Color(0xFF7C7E8A),
-                  fontSize: 13,
-                  height: 1.4,
-                  fontWeight: FontWeight.w600,
-                ),
+                'Belum ada alat tersimpan.',
+                style: TextStyle(color: _muted, fontWeight: FontWeight.w700),
               ),
             )
           else
             ...savedInterests.map((item) {
               final name = item['name']?.toString() ?? 'Alat musik';
-              final convertedPrice =
-                  item['converted_price']?.toString() ?? 'Estimasi tersedia';
-              final practice = item['practice']?.toString() ?? '';
+              final converted = item['converted_price']?.toString() ?? '-';
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 10),
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.82),
+                  color: _surfaceSoft,
                   borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: _border),
                 ),
                 child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(
-                      Icons.bookmark_rounded,
-                      color: Color(0xFF7C4DFF),
-                    ),
-                    const SizedBox(width: 11),
+                    const Icon(Icons.bookmark_rounded, color: _green),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -960,42 +980,25 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
                           Text(
                             name,
                             style: const TextStyle(
-                              color: Color(0xFF20243A),
-                              fontSize: 14,
+                              color: _text,
                               fontWeight: FontWeight.w900,
                             ),
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            convertedPrice,
+                            converted,
                             style: const TextStyle(
-                              color: Color(0xFF00A86B),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w900,
+                              color: _muted,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
-                          if (practice.isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              practice,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Color(0xFF6B7280),
-                                fontSize: 12,
-                                height: 1.35,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
                         ],
                       ),
                     ),
                     IconButton(
                       onPressed: () => _removeInterest(name),
                       icon: const Icon(Icons.delete_outline_rounded),
-                      color: const Color(0xFFE85D75),
-                      tooltip: 'Hapus minat',
+                      color: _pink,
                     ),
                   ],
                 ),
@@ -1006,57 +1009,59 @@ class _InstrumentPricesScreenState extends State<InstrumentPricesScreen> {
     );
   }
 
-  static const Color _bgColor = Color(0xFFFCFCFE);
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _bgColor,
+      backgroundColor: _bg,
       appBar: AppBar(
-        backgroundColor: _bgColor,
+        backgroundColor: _bg,
         elevation: 0,
         centerTitle: true,
         title: const Text(
-          'Rencana Beli Alat Musik',
-          style: TextStyle(
-            color: Color(0xFF20243A),
-            fontWeight: FontWeight.w900,
-          ),
+          'Rencana Alat Musik',
+          style: TextStyle(color: _text, fontWeight: FontWeight.w900),
         ),
-        iconTheme: const IconThemeData(color: Color(0xFF20243A)),
+        iconTheme: const IconThemeData(color: _text),
       ),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 34),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 120),
           children: [
             const Text(
-              'Pilih alat musik yang kamu incar, bandingkan estimasi biayanya dalam banyak mata uang, lalu simpan ke daftar minat.',
+              'Pilih alat, isi estimasi biaya, lalu lihat konversi dengan format angka yang mudah dibaca.',
               style: TextStyle(
+                color: _muted,
                 fontSize: 14,
                 height: 1.5,
-                color: Color(0xFF7C7E8A),
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w700,
               ),
             ),
             const SizedBox(height: 18),
-            _buildCurrencyDropdown(),
-            const SizedBox(height: 12),
             _buildRateStatusCard(),
             const SizedBox(height: 18),
-            _buildManualConverterCard(),
-            const SizedBox(height: 18),
-            const Text(
-              'Pilih Alat Musik',
-              style: TextStyle(
-                color: Color(0xFF20243A),
-                fontSize: 19,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 10),
             _buildInstrumentSelector(),
             const SizedBox(height: 18),
             _buildSelectedInstrumentDetail(),
+            const SizedBox(height: 18),
+            _buildManualConverterCard(),
+            const SizedBox(height: 18),
+            _buildConversionResultCard(),
+            const SizedBox(height: 18),
+            SizedBox(
+              height: 56,
+              child: ElevatedButton.icon(
+                onPressed: _saveSelectedInterest,
+                icon: const Icon(Icons.bookmark_add_rounded),
+                label: const Text('Simpan ke Minat'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _purple,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+              ),
+            ),
             const SizedBox(height: 18),
             _buildSavedInterestsSection(),
           ],

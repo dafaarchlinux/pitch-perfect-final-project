@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_pitch_detection/flutter_pitch_detection.dart';
+import 'package:noise_meter/noise_meter.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import '../../services/practice_progress_service.dart';
 
@@ -13,14 +14,21 @@ class DetectScreen extends StatefulWidget {
 }
 
 class _DetectScreenState extends State<DetectScreen> {
-  bool isGuitarMode = true;
+  bool isGuitarMode = false;
   bool isDetecting = false;
+  bool silentRoomCheckEnabled = true;
+  bool isCheckingRoomNoise = false;
+  double? roomNoiseDb;
+  String roomNoiseStatus =
+      'Cek ruangan aktif. Aplikasi akan mengecek kebisingan sebelum mulai.';
 
   final FlutterPitchDetection pitchDetector = FlutterPitchDetection();
   StreamSubscription<Map<String, dynamic>>? pitchSubscription;
   StreamSubscription<AccelerometerEvent>? accelerometerSubscription;
+  StreamSubscription<GyroscopeEvent>? gyroscopeSubscription;
 
   DateTime lastShakeTime = DateTime.fromMillisecondsSinceEpoch(0);
+  DateTime lastGyroSwitchTime = DateTime.fromMillisecondsSinceEpoch(0);
 
   String detectedNote = '-';
   String detectedFrequencyText = '-';
@@ -117,7 +125,7 @@ class _DetectScreenState extends State<DetectScreen> {
 
   String get tuningStatus {
     if (!isDetecting) {
-      return 'Pilih senar, lalu tekan Mulai Deteksi.';
+      return 'Pilih senar, lalu mulai stem gitar.';
     }
 
     if (detectedFrequency <= 0) {
@@ -143,7 +151,7 @@ class _DetectScreenState extends State<DetectScreen> {
 
   String get vocalStatus {
     if (!isDetecting) {
-      return 'Tekan Mulai Deteksi, lalu nyanyikan satu nada.';
+      return 'Mulai tes, lalu nyanyikan satu nada.';
     }
 
     if (detectedFrequency <= 0) {
@@ -167,6 +175,7 @@ class _DetectScreenState extends State<DetectScreen> {
   void initState() {
     super.initState();
     _startShakeListener();
+    _startGyroscopeListener();
   }
 
   void _startShakeListener() {
@@ -185,7 +194,33 @@ class _DetectScreenState extends State<DetectScreen> {
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Mode diganti lewat gerakan HP.'),
+            content: Text('Mode diganti lewat shake HP.'),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+    });
+  }
+
+  void _startGyroscopeListener() {
+    gyroscopeSubscription?.cancel();
+
+    gyroscopeSubscription = gyroscopeEventStream().listen((event) {
+      final rotationForce = event.x.abs() + event.y.abs() + event.z.abs();
+      final now = DateTime.now();
+      final cooldownDone =
+          now.difference(lastGyroSwitchTime).inMilliseconds > 1600;
+
+      if (rotationForce > 7.5 && cooldownDone && !isDetecting) {
+        lastGyroSwitchTime = now;
+        _toggleMode();
+
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Mode diganti lewat rotasi HP.'),
             behavior: SnackBarBehavior.floating,
             duration: Duration(seconds: 1),
           ),
@@ -271,6 +306,168 @@ class _DetectScreenState extends State<DetectScreen> {
     });
   }
 
+  Future<void> _runSilentRoomCheck() async {
+    if (isCheckingRoomNoise) return;
+
+    setState(() {
+      isCheckingRoomNoise = true;
+      roomNoiseDb = null;
+      roomNoiseStatus = 'Mengecek kebisingan ruangan lewat mikrofon...';
+    });
+
+    final readings = <double>[];
+    StreamSubscription<NoiseReading>? noiseSubscription;
+
+    try {
+      final noiseMeter = NoiseMeter();
+
+      noiseSubscription = noiseMeter.noise.listen((reading) {
+        final double db = reading.meanDecibel.toDouble();
+
+        if (db.isFinite) {
+          readings.add(db);
+
+          if (mounted) {
+            setState(() {
+              roomNoiseDb = db;
+            });
+          }
+        }
+      });
+
+      await Future.delayed(const Duration(seconds: 2));
+      await noiseSubscription.cancel();
+
+      final double averageDb = readings.isEmpty
+          ? 0.0
+          : readings.reduce((a, b) => a + b) / readings.length;
+
+      final isQuietEnough = readings.isEmpty || averageDb <= 68;
+
+      if (!mounted) return;
+
+      setState(() {
+        isCheckingRoomNoise = false;
+        roomNoiseDb = averageDb;
+        roomNoiseStatus = isQuietEnough
+            ? 'Ruangan aman untuk test vokal.'
+            : 'Ruangan cukup bising untuk test vokal.';
+      });
+
+      _showRoomCheckDialog(isQuietEnough: isQuietEnough, averageDb: averageDb);
+    } catch (_) {
+      await noiseSubscription?.cancel();
+
+      if (!mounted) return;
+
+      setState(() {
+        isCheckingRoomNoise = false;
+        roomNoiseStatus =
+            'Cek ruangan belum bisa membaca mikrofon. Coba izinkan akses mikrofon.';
+      });
+
+      _showRoomCheckErrorDialog();
+    }
+  }
+
+  void _showRoomCheckDialog({
+    required bool isQuietEnough,
+    required double averageDb,
+  }) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF17182C),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                isQuietEnough
+                    ? Icons.check_circle_rounded
+                    : Icons.volume_up_rounded,
+                color: isQuietEnough
+                    ? const Color(0xFF34D399)
+                    : const Color(0xFFFBBF24),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  isQuietEnough ? 'Ruangan Aman' : 'Ruangan Cukup Bising',
+                  style: const TextStyle(
+                    color: Color(0xFFF8FAFC),
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            isQuietEnough
+                ? 'Ruangan aman untuk test vokal. Kebisingan sekitar ${averageDb.toStringAsFixed(0)} dB.'
+                : 'Ruangan cukup bising, coba pindah ke tempat lebih sepi agar pembacaan nada lebih jelas. Kebisingan sekitar ${averageDb.toStringAsFixed(0)} dB.',
+            style: const TextStyle(
+              color: Color(0xFFB8BCD7),
+              height: 1.45,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Mengerti'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showRoomCheckErrorDialog() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF17182C),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.mic_off_rounded, color: Color(0xFFF472B6)),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Cek Ruangan Gagal',
+                  style: TextStyle(
+                    color: Color(0xFFF8FAFC),
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Aplikasi belum bisa membaca mikrofon untuk cek kebisingan. Pastikan izin mikrofon aktif.',
+            style: TextStyle(
+              color: Color(0xFFB8BCD7),
+              height: 1.45,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text('Mengerti'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> _startDetection() async {
     try {
       await pitchDetector.startDetection();
@@ -307,6 +504,21 @@ class _DetectScreenState extends State<DetectScreen> {
     }
   }
 
+  int? _calculateSessionScore() {
+    if (detectedFrequency <= 0 || !isSignalStable) return null;
+
+    if (isGuitarMode) {
+      final cents = centsDifference.abs();
+      return (100 - (cents * 2)).clamp(40, 100).round();
+    }
+
+    if (detectedAccuracy > 0) {
+      return detectedAccuracy.clamp(40, 100).round();
+    }
+
+    return 75;
+  }
+
   Future<void> _saveDetectionSession() async {
     if (detectedFrequency <= 0) return;
 
@@ -316,13 +528,14 @@ class _DetectScreenState extends State<DetectScreen> {
         ? selectedString['label'].toString()
         : null;
     final status = isGuitarMode ? tuningStatus : vocalStatus;
+    final sessionScore = _calculateSessionScore();
 
     await PracticeProgressService.addPracticeSession(
       title: isGuitarMode
           ? 'Cek tuning $targetString $targetNote'
           : 'Deteksi suara $detectedNote / $solfegeText',
       type: 'Detect',
-      score: null,
+      score: sessionScore,
       level: null,
       combo: null,
       passed: isSignalStable,
@@ -364,6 +577,92 @@ class _DetectScreenState extends State<DetectScreen> {
     }
   }
 
+  Widget _buildSilentRoomCheckCard() {
+    final noiseText = roomNoiseDb == null
+        ? 'Belum dicek'
+        : '${roomNoiseDb!.toStringAsFixed(0)} dB';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: const Color(0xFF22D3EE).withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(
+              isCheckingRoomNoise
+                  ? Icons.hearing_rounded
+                  : Icons.graphic_eq_rounded,
+              color: const Color(0xFF22D3EE),
+            ),
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Silent Room Check',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '$roomNoiseStatus • $noiseText',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFFB8BCD7),
+                    fontSize: 12,
+                    height: 1.35,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 38,
+                  child: ElevatedButton.icon(
+                    onPressed: isCheckingRoomNoise ? null : _runSilentRoomCheck,
+                    icon: Icon(
+                      isCheckingRoomNoise
+                          ? Icons.hourglass_top_rounded
+                          : Icons.mic_rounded,
+                      size: 18,
+                    ),
+                    label: Text(
+                      isCheckingRoomNoise ? 'Mengecek...' : 'Mulai Cek Ruangan',
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF22D3EE),
+                      foregroundColor: const Color(0xFF0B0D22),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      textStyle: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildModeSwitcher() {
     return Container(
       padding: const EdgeInsets.all(5),
@@ -376,21 +675,21 @@ class _DetectScreenState extends State<DetectScreen> {
         children: [
           Expanded(
             child: _buildModeTab(
-              title: 'Tuner Gitar',
-              icon: Icons.music_note_rounded,
-              selected: isGuitarMode,
+              title: 'Test Vokal',
+              icon: Icons.mic_rounded,
+              selected: !isGuitarMode,
               onTap: () {
-                if (!isDetecting && !isGuitarMode) _toggleMode();
+                if (!isDetecting && isGuitarMode) _toggleMode();
               },
             ),
           ),
           Expanded(
             child: _buildModeTab(
-              title: 'Deteksi Suara',
-              icon: Icons.mic_rounded,
-              selected: !isGuitarMode,
+              title: 'Stem Gitar',
+              icon: Icons.music_note_rounded,
+              selected: isGuitarMode,
               onTap: () {
-                if (!isDetecting && isGuitarMode) _toggleMode();
+                if (!isDetecting && !isGuitarMode) _toggleMode();
               },
             ),
           ),
@@ -700,7 +999,7 @@ class _DetectScreenState extends State<DetectScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Deteksi Nada Suara',
+                      'Test Vokal',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 18,
@@ -764,7 +1063,7 @@ class _DetectScreenState extends State<DetectScreen> {
                 Text(
                   hasSound
                       ? 'Nada musik: $noteText'
-                      : 'Nyanyikan satu nada seperti Do, Re, atau Mi.',
+                      : 'Nyanyikan satu nada dengan jelas.',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     color: Colors.white70,
@@ -808,7 +1107,7 @@ class _DetectScreenState extends State<DetectScreen> {
               border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
             ),
             child: const Text(
-              'Cara pakai: tekan Mulai Deteksi, nyanyikan satu nada dengan jelas, lalu lihat hasil Do/Re/Mi yang terbaca.',
+              'Cara pakai: mulai tes, nyanyikan satu nada, lalu lihat nada dan solfege yang terbaca.',
               style: TextStyle(
                 color: Color(0xFFD7DAE8),
                 fontSize: 12,
@@ -943,8 +1242,8 @@ class _DetectScreenState extends State<DetectScreen> {
 
   Widget _buildHowToUseCard() {
     final text = isGuitarMode
-        ? '1. Pilih senar target\n2. Tekan Mulai Deteksi\n3. Petik satu senar dekat mikrofon\n4. Lihat panah: tengah berarti pas'
-        : '1. Tekan Mulai Deteksi\n2. Nyanyikan satu nada\n3. Lihat nada musik dan Do Re Mi yang terbaca';
+        ? '1. Pilih senar\n2. Mulai deteksi\n3. Petik satu senar dekat mikrofon\n4. Ikuti indikator tuning'
+        : '1. Mulai test vokal\n2. Nyanyikan satu nada\n3. Lihat nada dan solfege yang terbaca';
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -1007,7 +1306,7 @@ class _DetectScreenState extends State<DetectScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Gunakan mikrofon HP untuk mengecek nada gitar atau suara.',
+              'Tes nada vokal atau stem gitar dengan mikrofon HP.',
               style: TextStyle(
                 color: Color(0xFFB8BBCC),
                 fontSize: 14,
@@ -1017,6 +1316,8 @@ class _DetectScreenState extends State<DetectScreen> {
             ),
             const SizedBox(height: 18),
             _buildModeSwitcher(),
+            const SizedBox(height: 14),
+            _buildSilentRoomCheckCard(),
             const SizedBox(height: 22),
             if (isGuitarMode) _buildGuitarStringSelector(),
             if (isGuitarMode) const SizedBox(height: 22),

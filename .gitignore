@@ -56,3 +56,15 @@ lib/core/config/
 *.bak_hive
 *.overpass.bak
 *.before_*
+
+# Backup files
+*.bak
+*.bak_*
+*.bak_*
+*.bak_openai
+*.bak_before_*
+*.old
+
+# Build outputs
+*.apk
+build/

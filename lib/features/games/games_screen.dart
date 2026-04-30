@@ -1,7 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/practice_progress_service.dart';
 
 class GamesScreen extends StatefulWidget {
@@ -275,16 +274,16 @@ class _GamesScreenState extends State<GamesScreen> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF7C4DFF), Color(0xFF5E35B1)],
+          colors: [Color(0xFF8B5CF6), Color(0xFF2563EB), Color(0xFFF472B6)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(30),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF5E35B1).withValues(alpha: 0.24),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
+            color: const Color(0xFF8B5CF6).withValues(alpha: 0.26),
+            blurRadius: 28,
+            offset: const Offset(0, 14),
           ),
         ],
       ),
@@ -420,12 +419,12 @@ class _GamesScreenState extends State<GamesScreen> {
             elevation: isActive ? 8 : 0,
             backgroundColor: canTap || isActive
                 ? color
-                : const Color(0xFFF0F0F6),
-            disabledBackgroundColor: isActive ? color : const Color(0xFFF0F0F6),
+                : const Color(0xFF232542),
+            disabledBackgroundColor: isActive ? color : const Color(0xFF232542),
             foregroundColor: Colors.white,
             disabledForegroundColor: isActive
                 ? Colors.white
-                : const Color(0xFFB1B3BE),
+                : const Color(0xFF7E84A8),
             padding: EdgeInsets.zero,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(24),
@@ -457,9 +456,16 @@ class _GamesScreenState extends State<GamesScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F7FB),
+        color: const Color(0xFF17182C),
         borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: const Color(0xFFEDEDF5)),
+        border: Border.all(color: const Color(0xFF2D3050)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.28),
+            blurRadius: 22,
+            offset: const Offset(0, 12),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -467,7 +473,7 @@ class _GamesScreenState extends State<GamesScreen> {
           const Text(
             'Papan Nada',
             style: TextStyle(
-              color: Color(0xFF20243A),
+              color: Color(0xFFF8FAFC),
               fontSize: 18,
               fontWeight: FontWeight.w900,
             ),
@@ -478,7 +484,7 @@ class _GamesScreenState extends State<GamesScreen> {
                 ? 'Tekan nada sesuai urutan yang kamu dengar.'
                 : 'Tombol nada akan aktif saat giliranmu menjawab.',
             style: const TextStyle(
-              color: Color(0xFF7C7E8A),
+              color: Color(0xFFB8BCD7),
               fontSize: 13,
               height: 1.4,
               fontWeight: FontWeight.w600,
@@ -534,8 +540,8 @@ class _GamesScreenState extends State<GamesScreen> {
             icon: const Icon(Icons.replay_rounded),
             label: const Text('Dengar Lagi'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF5E35B1),
-              side: const BorderSide(color: Color(0xFFDDD6FE)),
+              foregroundColor: const Color(0xFF22D3EE),
+              side: const BorderSide(color: Color(0xFF2D3050)),
               padding: const EdgeInsets.symmetric(vertical: 15),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(18),
@@ -567,7 +573,7 @@ class _GamesScreenState extends State<GamesScreen> {
         icon: Icon(icon),
         label: Text(label),
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFE85D75),
+          backgroundColor: const Color(0xFFF472B6),
           foregroundColor: Colors.white,
           elevation: 0,
           shape: RoundedRectangleBorder(
@@ -582,20 +588,20 @@ class _GamesScreenState extends State<GamesScreen> {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF7ED),
+        color: const Color(0xFF17182C),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFFFE2C7)),
+        border: Border.all(color: const Color(0xFF2D3050)),
       ),
       child: const Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.lightbulb_rounded, color: Color(0xFFFF8A65), size: 28),
+          Icon(Icons.lightbulb_rounded, color: Color(0xFFFBBF24), size: 28),
           SizedBox(width: 14),
           Expanded(
             child: Text(
-              'Cara main: dengarkan urutan nada random, lalu tekan tombol Do Re Mi sesuai urutan. Setiap level menambah satu nada baru. Target tertinggi: level 100.',
+              'Cara main: dengarkan urutan nada, lalu ulangi dengan menekan tombol Do Re Mi. Setiap level menambah satu nada baru.',
               style: TextStyle(
-                color: Color(0xFF8A4B22),
+                color: Color(0xFFB8BCD7),
                 fontSize: 13,
                 height: 1.45,
                 fontWeight: FontWeight.w700,
@@ -608,36 +614,24 @@ class _GamesScreenState extends State<GamesScreen> {
   }
 
   Future<void> _updateBestRecords() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    final oldBestScore = prefs.getInt('game_best_score') ?? 0;
-    final oldBestLevel = prefs.getInt('game_best_level') ?? 0;
-    final oldBestCombo = prefs.getInt('game_best_combo') ?? 0;
-
-    if (score > oldBestScore) {
-      await prefs.setInt('game_best_score', score);
-    }
-
-    if (level > oldBestLevel) {
-      await prefs.setInt('game_best_level', level);
-    }
-
-    if (bestCombo > oldBestCombo) {
-      await prefs.setInt('game_best_combo', bestCombo);
-    }
+    await PracticeProgressService.updateGameRecords(
+      score: score,
+      level: level,
+      combo: bestCombo,
+    );
 
     await _loadLeaderboard();
   }
 
   Future<void> _loadLeaderboard() async {
-    final prefs = await SharedPreferences.getInstance();
+    final records = await PracticeProgressService.getGameRecords();
 
     if (!mounted) return;
 
     setState(() {
-      bestScoreSaved = prefs.getInt('game_best_score') ?? 0;
-      bestLevelSaved = prefs.getInt('game_best_level') ?? 0;
-      bestComboSaved = prefs.getInt('game_best_combo') ?? 0;
+      bestScoreSaved = records['best_score'] ?? 0;
+      bestLevelSaved = records['best_level'] ?? 0;
+      bestComboSaved = records['best_combo'] ?? 0;
     });
   }
 
@@ -645,9 +639,16 @@ class _GamesScreenState extends State<GamesScreen> {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F7FB),
+        color: const Color(0xFF17182C),
         borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: const Color(0xFFEDEDF5)),
+        border: Border.all(color: const Color(0xFF2D3050)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.24),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -663,7 +664,7 @@ class _GamesScreenState extends State<GamesScreen> {
               Text(
                 'Papan Skor',
                 style: TextStyle(
-                  color: Color(0xFF20243A),
+                  color: Color(0xFFF8FAFC),
                   fontSize: 18,
                   fontWeight: FontWeight.w900,
                 ),
@@ -695,7 +696,7 @@ class _GamesScreenState extends State<GamesScreen> {
                 ? 'Belum ada rekor. Tekan Mulai Main untuk membuat skor pertamamu.'
                 : 'Rekor terbaikmu tersimpan otomatis saat skor, level, atau combo meningkat.',
             style: const TextStyle(
-              color: Color(0xFF7C7E8A),
+              color: Color(0xFFB8BCD7),
               fontSize: 12,
               height: 1.4,
               fontWeight: FontWeight.w600,
@@ -711,15 +712,16 @@ class _GamesScreenState extends State<GamesScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 13),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: const Color(0xFF232542),
           borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFF2D3050)),
         ),
         child: Column(
           children: [
             Text(
               value,
               style: const TextStyle(
-                color: Color(0xFF20243A),
+                color: Color(0xFFF8FAFC),
                 fontSize: 19,
                 fontWeight: FontWeight.w900,
               ),
@@ -728,7 +730,7 @@ class _GamesScreenState extends State<GamesScreen> {
             Text(
               title,
               style: const TextStyle(
-                color: Color(0xFF8A8D99),
+                color: Color(0xFFB8BCD7),
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
               ),
@@ -745,7 +747,7 @@ class _GamesScreenState extends State<GamesScreen> {
     super.dispose();
   }
 
-  static const Color _bgColor = Color(0xFFFCFCFE);
+  static const Color _bgColor = Color(0xFF0B0D22);
 
   @override
   void initState() {
@@ -764,23 +766,23 @@ class _GamesScreenState extends State<GamesScreen> {
         title: const Text(
           'Mini Games',
           style: TextStyle(
-            color: Color(0xFF20243A),
+            color: Color(0xFFF8FAFC),
             fontWeight: FontWeight.w900,
             fontSize: 24,
           ),
         ),
-        iconTheme: const IconThemeData(color: Color(0xFF20243A)),
+        iconTheme: const IconThemeData(color: Color(0xFFF8FAFC)),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(22, 12, 22, 170),
         children: [
           const Text(
-            'Latih telinga musikmu dengan game tangga nada yang cepat dan seru.',
+            'Uji ingatan nada, tingkatkan akurasi, dan simpan rekor terbaikmu.',
             style: TextStyle(
               fontSize: 15,
-              color: Color(0xFF7C7E8A),
+              color: Color(0xFFB8BCD7),
               height: 1.5,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 20),
