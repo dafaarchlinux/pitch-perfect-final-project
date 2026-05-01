@@ -1,6 +1,10 @@
 import 'dart:math';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../services/practice_progress_service.dart';
 
 class GamesScreen extends StatefulWidget {
@@ -11,120 +15,163 @@ class GamesScreen extends StatefulWidget {
 }
 
 class _GamesScreenState extends State<GamesScreen> {
+  static const Color _bg = Color(0xFF0B0D22);
+  static const Color _surface = Color(0xFF17182C);
+  static const Color _surfaceSoft = Color(0xFF232542);
+  static const Color _border = Color(0xFF2D3050);
+  static const Color _text = Color(0xFFF8FAFC);
+  static const Color _muted = Color(0xFF94A3B8);
+  static const Color _purple = Color(0xFF8B5CF6);
+  static const Color _cyan = Color(0xFF22D3EE);
+  static const Color _pink = Color(0xFFF472B6);
+  static const Color _green = Color(0xFF34D399);
+  static const Color _yellow = Color(0xFFFACC15);
+
+  static const String _bestScoreKey = 'repeat_pitch_best_score';
+  static const String _bestLevelKey = 'repeat_pitch_best_level';
+  static const String _bestComboKey = 'repeat_pitch_best_combo';
+
   final AudioPlayer audioPlayer = AudioPlayer();
   final Random random = Random();
 
-  String gameState = 'idle';
-  int level = 1;
-  int score = 0;
-  int combo = 0;
-  int bestCombo = 0;
-  int userIndex = 0;
-  int? activeNoteIndex;
-  bool isSaving = false;
-
-  int bestScoreSaved = 0;
-  int bestLevelSaved = 0;
-  int bestComboSaved = 0;
-
-  final List<int> sequence = [];
-
-  final List<Map<String, dynamic>> notes = [
+  final List<Map<String, dynamic>> notes = const [
     {
       'label': 'Do',
+      'tone': 'C4',
       'asset': 'assets/audio/notes/do.wav',
-      'emoji': '🍎',
-      'color': Color(0xFFE85D75),
+      'color': Color(0xFFE95778),
     },
     {
       'label': 'Re',
+      'tone': 'D4',
       'asset': 'assets/audio/notes/re.wav',
-      'emoji': '🍊',
-      'color': Color(0xFFFF8A65),
+      'color': Color(0xFFFF7E5F),
     },
     {
       'label': 'Mi',
+      'tone': 'E4',
       'asset': 'assets/audio/notes/mi.wav',
-      'emoji': '🍋',
-      'color': Color(0xFFFFC857),
+      'color': Color(0xFFFFD34E),
     },
     {
       'label': 'Fa',
+      'tone': 'F4',
       'asset': 'assets/audio/notes/fa.wav',
-      'emoji': '🍃',
-      'color': Color(0xFF21C67A),
+      'color': Color(0xFF81C784),
     },
     {
       'label': 'Sol',
+      'tone': 'G4',
       'asset': 'assets/audio/notes/sol.wav',
-      'emoji': '💧',
-      'color': Color(0xFF00A6FB),
+      'color': Color(0xFF4FC3F7),
     },
     {
       'label': 'La',
+      'tone': 'A4',
       'asset': 'assets/audio/notes/la.wav',
-      'emoji': '🌌',
-      'color': Color(0xFF5E60CE),
+      'color': Color(0xFF7986CB),
     },
     {
       'label': 'Si',
+      'tone': 'B4',
       'asset': 'assets/audio/notes/si.wav',
-      'emoji': '🍇',
-      'color': Color(0xFF9C27B0),
+      'color': Color(0xFFBA68C8),
+    },
+    {
+      'label': 'Do+',
+      'tone': 'C5',
+      'asset': 'assets/audio/notes/doo.wav',
+      'color': Color(0xFFEC5B93),
     },
   ];
 
-  String get feedbackText {
-    switch (gameState) {
-      case 'playing':
-        return 'Dengarkan urutan nadanya...';
-      case 'user_turn':
-        return 'Sekarang tekan urutan nada yang sama!';
-      case 'success':
-        return 'Keren! Level berikutnya dimulai.';
-      case 'game_over':
-        return 'Ups, urutannya belum tepat. Coba lagi!';
-      case 'finished':
-        return 'Lolos! Pendengaran nadamu makin tajam.';
-      default:
-        return 'Dengarkan nada, lalu ulangi dengan menekan tombol.';
-    }
+  List<int> sequence = [];
+  int userStep = 0;
+  int score = 0;
+  int level = 1;
+  int combo = 0;
+  int bestScore = 0;
+  int bestLevel = 0;
+  int bestCombo = 0;
+
+  String gameMode = 'idle'; // idle, playing, practice, showing, listening, gameOver
+  String statusMessage = 'Tekan Mulai Main untuk memulai tantangan nada.';
+  int? activeNoteIndex;
+  bool isBusy = false;
+
+  bool get _canPressKeys {
+    if (isBusy) return false;
+    return gameMode == 'practice' ||
+        gameMode == 'listening' ||
+        gameMode == 'idle' ||
+        gameMode == 'gameOver';
   }
 
-  String get mascot {
-    switch (gameState) {
-      case 'playing':
-        return '🐦';
-      case 'user_turn':
-        return '🐤';
-      case 'success':
-        return '🥳';
-      case 'game_over':
-        return '🥺';
-      case 'finished':
-        return '🏆';
-      default:
-        return '🎵';
-    }
+  @override
+  void initState() {
+    super.initState();
+    _loadBestScore();
+  }
+
+  @override
+  void dispose() {
+    audioPlayer.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadBestScore() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    if (!mounted) return;
+
+    setState(() {
+      bestScore = prefs.getInt(_bestScoreKey) ?? 0;
+      bestLevel = prefs.getInt(_bestLevelKey) ?? 0;
+      bestCombo = prefs.getInt(_bestComboKey) ?? 0;
+    });
+  }
+
+  Future<void> _saveBestScore() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_bestScoreKey, bestScore);
+    await prefs.setInt(_bestLevelKey, bestLevel);
+    await prefs.setInt(_bestComboKey, bestCombo);
   }
 
   Future<void> _playNote(int index) async {
+    if (index < 0 || index >= notes.length) return;
+
     setState(() => activeNoteIndex = index);
 
-    await audioPlayer.stop();
-    await audioPlayer.setAsset(notes[index]['asset'].toString());
-    await audioPlayer.play();
+    try {
+      await audioPlayer.stop();
+      await audioPlayer.setSpeed(1.0);
+      await audioPlayer.setAsset(notes[index]['asset'].toString());
+      await audioPlayer.play();
+      await Future.delayed(const Duration(milliseconds: 420));
+    } catch (_) {
+      try {
+        await SystemSound.play(SystemSoundType.click);
+      } catch (_) {}
+      await Future.delayed(const Duration(milliseconds: 240));
+    }
 
-    await Future.delayed(const Duration(milliseconds: 420));
+    try {
+      await audioPlayer.setSpeed(1.0);
+    } catch (_) {}
 
     if (!mounted) return;
     setState(() => activeNoteIndex = null);
   }
 
   Future<void> _playSequence() async {
+    if (sequence.isEmpty || isBusy) return;
+
     setState(() {
-      gameState = 'playing';
-      userIndex = 0;
+      isBusy = true;
+      gameMode = 'showing';
+      userStep = 0;
+      statusMessage = 'Dengarkan urutan nadanya...';
     });
 
     await Future.delayed(const Duration(milliseconds: 450));
@@ -138,228 +185,183 @@ class _GamesScreenState extends State<GamesScreen> {
     if (!mounted) return;
 
     setState(() {
-      gameState = 'user_turn';
+      userStep = 0;
+      isBusy = false;
+      gameMode = 'listening';
+      statusMessage = 'Giliranmu! Ulangi nadanya.';
     });
   }
 
   Future<void> _startGame() async {
+    if (isBusy) return;
+
     await audioPlayer.stop();
 
     setState(() {
-      level = 1;
       score = 0;
+      level = 1;
       combo = 0;
-      bestCombo = 0;
-      userIndex = 0;
-      sequence
-        ..clear()
-        ..add(random.nextInt(notes.length));
-      gameState = 'playing';
+      userStep = 0;
+      sequence = [random.nextInt(notes.length)];
+      gameMode = 'playing';
+      statusMessage = 'Bersiap mendengarkan nada pertama...';
     });
 
     await _playSequence();
   }
 
-  Future<void> _nextLevel() async {
-    if (level >= 100) {
-      await _finishGame();
-      return;
-    }
+  void _startPracticeMode() {
+    if (isBusy) return;
 
     setState(() {
-      level++;
-      sequence.add(random.nextInt(notes.length));
-      gameState = 'success';
+      gameMode = 'practice';
+      statusMessage = 'Mode latihan aktif. Tekan tuts secara bebas.';
+      sequence = [];
+      userStep = 0;
+      combo = 0;
     });
-
-    await Future.delayed(const Duration(milliseconds: 850));
-    await _playSequence();
   }
 
   Future<void> _handleNoteTap(int index) async {
-    if (gameState != 'user_turn') return;
+    if (!_canPressKeys) return;
+
+    if (gameMode == 'idle' || gameMode == 'gameOver') {
+      await _playNote(index);
+      setState(() {
+        statusMessage = 'Tekan Mulai Main untuk bermain, atau Latihan untuk bebas menekan tuts.';
+      });
+      return;
+    }
+
+    if (gameMode == 'practice') {
+      await _playNote(index);
+      setState(() {
+        statusMessage = 'Mode latihan aktif. Anda dapat melanjutkan permainan kapan saja.';
+      });
+      return;
+    }
+
+    if (gameMode != 'listening') return;
 
     await _playNote(index);
 
-    final expected = sequence[userIndex];
-
+    final expected = sequence[userStep];
     if (index == expected) {
+      final isLast = userStep == sequence.length - 1;
+
       setState(() {
-        userIndex++;
+        userStep++;
         combo++;
-        if (combo > bestCombo) bestCombo = combo;
         score += 10 + (combo * 2);
+        statusMessage = isLast
+            ? 'Benar! Level berikutnya dimulai.'
+            : 'Benar! Lanjutkan urutannya.';
       });
 
-      await _updateBestRecords();
+      if (isLast) {
+        await Future.delayed(const Duration(milliseconds: 650));
+        if (!mounted) return;
 
-      if (userIndex >= sequence.length) {
-        await _nextLevel();
+        setState(() {
+          level++;
+          sequence.add(random.nextInt(notes.length));
+          userStep = 0;
+        });
+
+        await _playSequence();
       }
     } else {
-      setState(() {
-        combo = 0;
-        gameState = 'game_over';
-      });
-
-      await _saveResult(passed: false);
+      await _gameOver();
     }
   }
 
-  Future<void> _finishGame() async {
+  Future<void> _gameOver() async {
+    final finalScore = score;
+    final finalLevel = level;
+    final finalCombo = combo;
+    final accuracy = ((finalScore / max(1, finalLevel * 20)) * 100)
+        .clamp(35, 95)
+        .round();
+
+    final isNewBest = finalScore > bestScore;
+
     setState(() {
-      gameState = 'finished';
+      gameMode = 'gameOver';
+      statusMessage = isNewBest
+          ? 'Game selesai. Skor terbaik baru!'
+          : 'Game selesai. Coba ulangi lagi ya.';
+      bestScore = max(bestScore, finalScore);
+      bestLevel = max(bestLevel, finalLevel);
+      bestCombo = max(bestCombo, finalCombo);
+      userStep = 0;
+      sequence = [];
     });
 
-    await _saveResult(passed: true);
+    await _saveBestScore();
+
+    try {
+      await PracticeProgressService.addPracticeSession(
+        title: 'Latihan Repeat Pitch sampai level $finalLevel',
+        type: 'Mini Game',
+        score: accuracy,
+        level: finalLevel,
+        combo: finalCombo,
+        passed: false,
+        metadata: {
+          'game_name': 'Repeat Pitch',
+          'raw_score': finalScore,
+          'accuracy': accuracy,
+          'level_reached': finalLevel,
+          'best_combo': finalCombo,
+          'sequence_length': finalLevel,
+          'result': 'Perlu latihan lagi',
+          'storage': 'Hive',
+        },
+      );
+    } catch (_) {}
   }
 
-  Future<void> _saveResult({required bool passed}) async {
-    if (isSaving) return;
-
-    setState(() => isSaving = true);
-
-    final accuracy = passed
-        ? 100
-        : ((score / max(1, level * 20)) * 100).clamp(35, 95).round();
-
-    await PracticeProgressService.addPracticeSession(
-      title: passed
-          ? 'Lolos Repeat Pitch level $level'
-          : 'Latihan Repeat Pitch sampai level $level',
-      type: 'Mini Game',
-      score: accuracy,
-      level: level,
-      combo: bestCombo,
-      passed: passed,
-      metadata: {
-        'game_name': 'Repeat Pitch',
-        'raw_score': score,
-        'accuracy': accuracy,
-        'level_reached': level,
-        'best_combo': bestCombo,
-        'sequence_length': sequence.length,
-        'max_level': 100,
-        'result': passed ? 'Selesai' : 'Perlu latihan lagi',
-      },
-    );
-
-    await _loadLeaderboard();
-
-    if (!mounted) return;
-
-    setState(() => isSaving = false);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          passed
-              ? 'Mantap! Kamu berhasil menyelesaikan challenge.'
-              : 'Game selesai. Skor terbaik akan tersimpan otomatis.',
-        ),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  Future<void> _replaySequence() async {
-    if (gameState == 'playing') return;
+  Future<void> _repeatSequence() async {
+    if (sequence.isEmpty || isBusy || gameMode == 'practice') return;
     await _playSequence();
   }
 
-  Widget _buildStatusCard() {
-    final progress = sequence.isEmpty ? 0.0 : userIndex / sequence.length;
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF8B5CF6), Color(0xFF2563EB), Color(0xFFF472B6)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF8B5CF6).withValues(alpha: 0.26),
-            blurRadius: 28,
-            offset: const Offset(0, 14),
-          ),
-        ],
+  Widget _pageTitle() {
+    return const Text(
+      'Mini Games',
+      textAlign: TextAlign.center,
+      style: TextStyle(
+        color: _text,
+        fontSize: 28,
+        fontWeight: FontWeight.w900,
       ),
+    );
+  }
+
+  Widget _gameTitle() {
+    return const Padding(
+      padding: EdgeInsets.only(top: 8),
       child: Column(
         children: [
-          Row(
-            children: [
-              Container(
-                width: 76,
-                height: 76,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(26),
-                ),
-                child: Center(
-                  child: Text(mascot, style: const TextStyle(fontSize: 38)),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      gameState == 'finished'
-                          ? 'Challenge Lolos!'
-                          : 'Repeat Pitch',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 25,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 7),
-                    Text(
-                      feedbackText,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 13,
-                        height: 1.45,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              _buildHeroMiniInfo('Level', '$level'),
-              const SizedBox(width: 10),
-              _buildHeroMiniInfo('Skor', '$score'),
-              const SizedBox(width: 10),
-              _buildHeroMiniInfo('Combo', '${combo}x'),
-            ],
-          ),
-          const SizedBox(height: 16),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: progress.clamp(0.0, 1.0),
-              minHeight: 9,
-              backgroundColor: Colors.white.withValues(alpha: 0.22),
-              color: const Color(0xFFFFC857),
+          Text(
+            'REPEAT PITCH',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: _text,
+              fontSize: 30,
+              height: 1.18,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.2,
             ),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: 8),
           Text(
-            sequence.isEmpty
-                ? 'Belum mulai'
-                : 'Progress jawaban: $userIndex / ${sequence.length}',
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
+            'Dengarkan urutan nada, lalu ulangi!',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: _muted,
+              fontSize: 13,
+              height: 1.4,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -368,371 +370,146 @@ class _GamesScreenState extends State<GamesScreen> {
     );
   }
 
-  Widget _buildHeroMiniInfo(String title, String value) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.13),
-          borderRadius: BorderRadius.circular(18),
+  Widget _scoreBoard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: _border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _scoreItem(
+              label: 'SKOR SEKARANG',
+              value: '$score',
+              color: _cyan,
+              icon: null,
+            ),
+          ),
+          Container(width: 1, height: 44, color: _border),
+          Expanded(
+            child: _scoreItem(
+              label: 'TERBAIK',
+              value: '$bestScore',
+              color: _yellow,
+              icon: Icons.emoji_events_rounded,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _scoreItem({
+    required String label,
+    required String value,
+    required Color color,
+    IconData? icon,
+  }) {
+    return Column(
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: _muted,
+            fontSize: 10,
+            fontWeight: FontWeight.w900,
+          ),
         ),
-        child: Column(
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            if (icon != null) ...[
+              Icon(icon, color: color, size: 19),
+              const SizedBox(width: 6),
+            ],
             Text(
               value,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 20,
+              style: TextStyle(
+                color: icon == null ? color : _text,
+                fontSize: 30,
                 fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              title,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
               ),
             ),
           ],
         ),
-      ),
+      ],
     );
   }
 
-  Widget _buildNoteButton(int index) {
-    final note = notes[index];
-    final color = note['color'] as Color;
-    final isActive = activeNoteIndex == index;
-    final canTap = gameState == 'user_turn';
-
-    return SizedBox(
-      width: 76,
-      height: 86,
-      child: AnimatedScale(
-        duration: const Duration(milliseconds: 140),
-        scale: isActive ? 1.08 : 1.0,
-        child: ElevatedButton(
-          onPressed: canTap ? () => _handleNoteTap(index) : null,
-          style: ElevatedButton.styleFrom(
-            elevation: isActive ? 8 : 0,
-            backgroundColor: canTap || isActive
-                ? color
-                : const Color(0xFF232542),
-            disabledBackgroundColor: isActive ? color : const Color(0xFF232542),
-            foregroundColor: Colors.white,
-            disabledForegroundColor: isActive
-                ? Colors.white
-                : const Color(0xFF7E84A8),
-            padding: EdgeInsets.zero,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                note['label'].toString(),
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                note['emoji'].toString(),
-                style: const TextStyle(fontSize: 24),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNoteBoard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF17182C),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: const Color(0xFF2D3050)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.28),
-            blurRadius: 22,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Papan Nada',
-            style: TextStyle(
-              color: Color(0xFFF8FAFC),
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            gameState == 'user_turn'
-                ? 'Tekan nada sesuai urutan yang kamu dengar.'
-                : 'Tombol nada akan aktif saat giliranmu menjawab.',
-            style: const TextStyle(
-              color: Color(0xFFB8BCD7),
-              fontSize: 13,
-              height: 1.4,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Center(
-            child: Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 10,
-              runSpacing: 10,
-              children: List.generate(
-                notes.length,
-                (index) => _buildNoteButton(index),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildControls() {
-    if (gameState == 'idle') {
-      return _buildPrimaryButton(
-        label: 'Mulai Main',
-        icon: Icons.play_arrow_rounded,
-        onPressed: _startGame,
-      );
-    }
-
-    if (gameState == 'game_over') {
-      return _buildPrimaryButton(
-        label: 'Coba Lagi',
-        icon: Icons.refresh_rounded,
-        onPressed: _startGame,
-      );
-    }
-
-    if (gameState == 'finished') {
-      return _buildPrimaryButton(
-        label: 'Main Lagi',
-        icon: Icons.emoji_events_rounded,
-        onPressed: _startGame,
-      );
-    }
-
+  Widget _actionButtons() {
     return Row(
       children: [
         Expanded(
-          child: OutlinedButton.icon(
-            onPressed: gameState == 'playing' ? null : _replaySequence,
-            icon: const Icon(Icons.replay_rounded),
-            label: const Text('Dengar Lagi'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF22D3EE),
-              side: const BorderSide(color: Color(0xFF2D3050)),
-              padding: const EdgeInsets.symmetric(vertical: 15),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
-              ),
+          child: _bigActionButton(
+            title: gameMode == 'idle' || gameMode == 'gameOver'
+                ? 'Mulai Main'
+                : 'Ulangi Game',
+            icon: Icons.play_arrow_rounded,
+            gradient: const LinearGradient(
+              colors: [Color(0xFF9333EA), Color(0xFF6D4DF2)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
+            onTap: _startGame,
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 14),
         Expanded(
-          child: _buildPrimaryButton(
-            label: 'Ulang Game',
-            icon: Icons.restart_alt_rounded,
-            onPressed: _startGame,
+          child: _bigActionButton(
+            title: 'Latihan',
+            icon: Icons.keyboard_alt_rounded,
+            gradient: null,
+            onTap: _startPracticeMode,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildPrimaryButton({
-    required String label,
+  Widget _bigActionButton({
+    required String title,
     required IconData icon,
-    required VoidCallback onPressed,
+    required VoidCallback onTap,
+    Gradient? gradient,
   }) {
-    return SizedBox(
-      height: 54,
-      child: ElevatedButton.icon(
-        onPressed: onPressed,
-        icon: Icon(icon),
-        label: Text(label),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFF472B6),
-          foregroundColor: Colors.white,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHowToPlay() {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFF17182C),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFF2D3050)),
-      ),
-      child: const Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.lightbulb_rounded, color: Color(0xFFFBBF24), size: 28),
-          SizedBox(width: 14),
-          Expanded(
-            child: Text(
-              'Cara main: dengarkan urutan nada, lalu ulangi dengan menekan tombol Do Re Mi. Setiap level menambah satu nada baru.',
-              style: TextStyle(
-                color: Color(0xFFB8BCD7),
-                fontSize: 13,
-                height: 1.45,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _updateBestRecords() async {
-    await PracticeProgressService.updateGameRecords(
-      score: score,
-      level: level,
-      combo: bestCombo,
-    );
-
-    await _loadLeaderboard();
-  }
-
-  Future<void> _loadLeaderboard() async {
-    final records = await PracticeProgressService.getGameRecords();
-
-    if (!mounted) return;
-
-    setState(() {
-      bestScoreSaved = records['best_score'] ?? 0;
-      bestLevelSaved = records['best_level'] ?? 0;
-      bestComboSaved = records['best_combo'] ?? 0;
-    });
-  }
-
-  Widget _buildLeaderboardCard() {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFF17182C),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: const Color(0xFF2D3050)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.24),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(
-                Icons.emoji_events_rounded,
-                color: Color(0xFFFFB703),
-                size: 27,
-              ),
-              SizedBox(width: 10),
-              Text(
-                'Papan Skor',
-                style: TextStyle(
-                  color: Color(0xFFF8FAFC),
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              _buildLeaderboardMini(
-                'Skor',
-                bestScoreSaved == 0 ? '-' : '$bestScoreSaved',
-              ),
-              const SizedBox(width: 10),
-              _buildLeaderboardMini(
-                'Level',
-                bestLevelSaved == 0 ? '-' : '$bestLevelSaved',
-              ),
-              const SizedBox(width: 10),
-              _buildLeaderboardMini(
-                'Combo',
-                bestComboSaved == 0 ? '-' : '${bestComboSaved}x',
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            bestScoreSaved == 0
-                ? 'Belum ada rekor. Tekan Mulai Main untuk membuat skor pertamamu.'
-                : 'Rekor terbaikmu tersimpan otomatis saat skor, level, atau combo meningkat.',
-            style: const TextStyle(
-              color: Color(0xFFB8BCD7),
-              fontSize: 12,
-              height: 1.4,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLeaderboardMini(String title, String value) {
-    return Expanded(
+    return InkWell(
+      onTap: isBusy ? null : onTap,
+      borderRadius: BorderRadius.circular(26),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 13),
+        height: 96,
         decoration: BoxDecoration(
-          color: const Color(0xFF232542),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFF2D3050)),
+          gradient: gradient,
+          color: gradient == null ? _surfaceSoft : null,
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(
+            color: gradient == null ? _border : Colors.transparent,
+          ),
+          boxShadow: gradient == null
+              ? []
+              : [
+                  BoxShadow(
+                    color: _purple.withOpacity(0.28),
+                    blurRadius: 24,
+                    offset: const Offset(0, 12),
+                  ),
+                ],
         ),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              value,
-              style: const TextStyle(
-                color: Color(0xFFF8FAFC),
-                fontSize: 19,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 4),
+            Icon(icon, color: Colors.white, size: 32),
+            const SizedBox(height: 8),
             Text(
               title,
               style: const TextStyle(
-                color: Color(0xFFB8BCD7),
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w900,
               ),
             ),
           ],
@@ -741,61 +518,311 @@ class _GamesScreenState extends State<GamesScreen> {
     );
   }
 
-  @override
-  void dispose() {
-    audioPlayer.dispose();
-    super.dispose();
+  Widget _statusCard() {
+    final bool practice = gameMode == 'practice';
+    final bool gameOver = gameMode == 'gameOver';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: practice
+              ? _green.withOpacity(0.65)
+              : gameOver
+                  ? _pink.withOpacity(0.65)
+                  : _cyan.withOpacity(0.45),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: practice
+                  ? _green
+                  : gameOver
+                      ? _pink
+                      : _green,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              statusMessage,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: _text,
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: sequence.isEmpty || isBusy || gameMode == 'practice'
+                ? null
+                : _repeatSequence,
+            icon: const Icon(Icons.replay_rounded),
+            color: _text,
+            style: IconButton.styleFrom(backgroundColor: _surfaceSoft),
+            tooltip: 'Ulangi nada',
+          ),
+        ],
+      ),
+    );
   }
 
-  static const Color _bgColor = Color(0xFF0B0D22);
+  Widget _scoreInfo() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _miniInfo(
+              label: 'LEVEL',
+              value: '$level',
+              icon: Icons.layers_rounded,
+              color: _purple,
+            ),
+          ),
+          Expanded(
+            child: _miniInfo(
+              label: 'COMBO',
+              value: '$combo',
+              icon: Icons.flash_on_rounded,
+              color: _yellow,
+            ),
+          ),
+          Expanded(
+            child: _miniInfo(
+              label: 'BEST LEVEL',
+              value: '$bestLevel',
+              icon: Icons.workspace_premium_rounded,
+              color: _green,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-  @override
-  void initState() {
-    super.initState();
-    _loadLeaderboard();
+  Widget _miniInfo({
+    required String label,
+    required String value,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Column(
+      children: [
+        Icon(icon, color: color, size: 18),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            color: _text,
+            fontSize: 17,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: _muted,
+            fontSize: 9,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _pianoKeys() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = 5.0;
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: List.generate(notes.length, (index) {
+            final note = notes[index];
+            final color = note['color'] as Color;
+            final active = activeNoteIndex == index;
+
+            return Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  right: index == notes.length - 1 ? 0 : spacing,
+                ),
+                child: _pianoKey(
+                  height: active ? 118 : 128,
+                  color: color,
+                  label: note['label'].toString(),
+                  tone: note['tone'].toString(),
+                  active: active,
+                  onTap: () => _handleNoteTap(index),
+                ),
+              ),
+            );
+          }),
+        );
+      },
+    );
+  }
+
+  Widget _pianoKey({
+    required double height,
+    required Color color,
+    required String label,
+    required String tone,
+    required bool active,
+    required VoidCallback onTap,
+  }) {
+    return AnimatedScale(
+      duration: const Duration(milliseconds: 120),
+      scale: active ? 0.94 : 1,
+      child: InkWell(
+        onTap: _canPressKeys ? onTap : null,
+        borderRadius: BorderRadius.circular(14),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          height: height,
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 3),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                color.withOpacity(active ? 1 : 0.95),
+                color.withOpacity(active ? 0.72 : 0.86),
+              ],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: color.withOpacity(active ? 0.38 : 0.16),
+                blurRadius: active ? 20 : 10,
+                offset: const Offset(0, 7),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Container(
+                width: double.infinity,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.22),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              const Spacer(),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  tone,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.60),
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _hint() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(Icons.info_outline_rounded, color: _muted, size: 15),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            gameMode == 'practice'
+                ? 'MODE LATIHAN: TEKAN TUTS SECARA BEBAS.'
+                : 'TEKAN TUTS SESUAI URUTAN UNTUK MENDAPATKAN SKOR TINGGI.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: _muted,
+              fontSize: 9,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _bgColor,
+      backgroundColor: _bg,
       appBar: AppBar(
-        backgroundColor: _bgColor,
+        backgroundColor: _bg,
         elevation: 0,
         centerTitle: true,
+        iconTheme: const IconThemeData(color: _text),
         title: const Text(
           'Mini Games',
           style: TextStyle(
-            color: Color(0xFFF8FAFC),
-            fontWeight: FontWeight.w900,
+            color: _text,
             fontSize: 24,
+            fontWeight: FontWeight.w900,
           ),
         ),
-        iconTheme: const IconThemeData(color: Color(0xFFF8FAFC)),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(22, 12, 22, 170),
-        children: [
-          const Text(
-            'Uji ingatan nada, tingkatkan akurasi, dan simpan rekor terbaikmu.',
-            style: TextStyle(
-              fontSize: 15,
-              color: Color(0xFFB8BCD7),
-              height: 1.5,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 20),
-          _buildStatusCard(),
-          const SizedBox(height: 18),
-          _buildLeaderboardCard(),
-          const SizedBox(height: 18),
-          _buildControls(),
-          const SizedBox(height: 18),
-          _buildNoteBoard(),
-          const SizedBox(height: 18),
-          _buildHowToPlay(),
-        ],
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 120),
+          children: [
+            _gameTitle(),
+            const SizedBox(height: 22),
+            _actionButtons(),
+            const SizedBox(height: 16),
+            _scoreBoard(),
+            const SizedBox(height: 16),
+            _statusCard(),
+            const SizedBox(height: 16),
+            _scoreInfo(),
+            if (gameMode != 'idle') ...[
+              const SizedBox(height: 26),
+              _pianoKeys(),
+              const SizedBox(height: 20),
+              _hint(),
+            ],
+          ],
+        ),
       ),
     );
   }
