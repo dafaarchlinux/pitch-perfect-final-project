@@ -6,10 +6,10 @@ import 'package:just_audio/just_audio.dart';
 import '../../services/audio_db_service.dart';
 import '../../services/deezer_music_service.dart';
 import '../../services/exchange_rate_service.dart';
-import '../../services/music_reference_service.dart';
-import '../../services/practice_progress_service.dart';
 import '../../services/location_service.dart';
+import '../../services/music_reference_service.dart';
 import '../../services/nearby_music_store_service.dart';
+import '../../services/practice_progress_service.dart';
 import '../../services/session_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -33,32 +33,32 @@ class _HomeScreenState extends State<HomeScreen> {
   static const Color _pink = Color(0xFFF472B6);
   static const Color _green = Color(0xFF34D399);
 
-  String userName = 'Pengguna';
+  String userName = 'Music Enthusiast';
   String? profileImagePath;
   bool isLoading = true;
   bool isLoadingMusic = true;
-  final AudioPlayer audioPlayer = AudioPlayer();
-  String? playingPreviewUrl;
+  bool isLoadingNearestStore = false;
 
   int totalSessions = 0;
   int weeklySessions = 0;
   int? averageScore;
 
-  List<Map<String, dynamic>> musicRecommendations = [];
-  List<Map<String, dynamic>> instrumentPlans = [];
-  List<Map<String, dynamic>> practiceSchedules = [];
-  Map<String, dynamic>? artistSpotlight;
-  Map<String, double> currencyRates = {};
   Map<String, int> gameRecords = {
     'best_score': 0,
     'best_level': 0,
     'best_combo': 0,
   };
 
-  List<Map<String, dynamic>> latestSchedules = [];
-  List<Map<String, dynamic>> latestInstrumentPlans = [];
+  List<Map<String, dynamic>> musicRecommendations = [];
+  List<Map<String, dynamic>> instrumentPlans = [];
+  List<Map<String, dynamic>> practiceSchedules = [];
+  List<Map<String, dynamic>> historyItems = [];
   Map<String, dynamic>? nearestMusicStore;
-  bool isLoadingNearestStore = false;
+  Map<String, dynamic>? artistSpotlight;
+  Map<String, double> currencyRates = {};
+
+  final AudioPlayer audioPlayer = AudioPlayer();
+  String? playingPreviewUrl;
 
   final List<String> recommendationQueries = const [
     'vocal acoustic pop',
@@ -98,17 +98,45 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadHome() async {
+    setState(() => isLoading = true);
+
     final name = await SessionService.getUserName();
     final imagePath = await SessionService.getProfileImagePath();
-    final summary = await PracticeProgressService.getSummary();
-    final instruments = await PracticeProgressService.getInstrumentInterests();
-    final schedules = await PracticeProgressService.getPracticeSchedules();
-    final records = await PracticeProgressService.getGameRecords();
+
+    Map<String, dynamic> summary = {};
+    List<Map<String, dynamic>> instruments = [];
+    List<Map<String, dynamic>> schedules = [];
+    List<Map<String, dynamic>> history = [];
+    Map<String, int> records = {
+      'best_score': 0,
+      'best_level': 0,
+      'best_combo': 0,
+    };
+
+    try {
+      summary = await PracticeProgressService.getSummary();
+    } catch (_) {}
+
+    try {
+      instruments = await PracticeProgressService.getInstrumentInterests();
+    } catch (_) {}
+
+    try {
+      schedules = await PracticeProgressService.getPracticeSchedules();
+    } catch (_) {}
+
+    try {
+      records = await PracticeProgressService.getGameRecords();
+    } catch (_) {}
+
+    try {
+      history = await PracticeProgressService.getHistory();
+    } catch (_) {}
 
     if (!mounted) return;
 
     setState(() {
-      userName = name.trim().isEmpty ? 'Pengguna' : name.trim();
+      userName = name.trim().isEmpty ? 'Music Enthusiast' : name.trim();
       profileImagePath = imagePath;
       totalSessions = summary['total_sessions'] ?? 0;
       weeklySessions = summary['weekly_sessions'] ?? 0;
@@ -116,8 +144,7 @@ class _HomeScreenState extends State<HomeScreen> {
       instrumentPlans = instruments;
       practiceSchedules = schedules;
       gameRecords = records;
-      latestSchedules = schedules.take(3).toList();
-      latestInstrumentPlans = instrumentPlans.take(3).toList();
+      historyItems = history;
       isLoading = false;
     });
 
@@ -130,10 +157,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadMusicRecommendations() async {
     if (!mounted) return;
-
-    setState(() {
-      isLoadingMusic = true;
-    });
+    setState(() => isLoadingMusic = true);
 
     final startIndex = DateTime.now().minute % recommendationQueries.length;
     final orderedQueries = [
@@ -145,14 +169,14 @@ class _HomeScreenState extends State<HomeScreen> {
       try {
         final result = await DeezerMusicService.searchTracks(
           query: query,
-          limit: 6,
+          limit: 8,
         );
 
         if (!mounted) return;
 
         if (result.isNotEmpty) {
           setState(() {
-            musicRecommendations = result.take(4).toList();
+            musicRecommendations = result.take(8).toList();
             isLoadingMusic = false;
           });
           return;
@@ -163,15 +187,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     try {
-      final fallback = await MusicReferenceService.searchITunes(
-        'acoustic guitar',
-      );
-
+      final fallback = await MusicReferenceService.searchITunes('acoustic guitar');
       if (!mounted) return;
 
       if (fallback.isNotEmpty) {
         setState(() {
-          musicRecommendations = fallback.take(4).toList();
+          musicRecommendations = fallback.take(8).toList();
           isLoadingMusic = false;
         });
         return;
@@ -179,7 +200,6 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {}
 
     if (!mounted) return;
-
     setState(() {
       musicRecommendations = [];
       isLoadingMusic = false;
@@ -196,13 +216,9 @@ class _HomeScreenState extends State<HomeScreen> {
     for (final artistName in orderedArtists) {
       try {
         final artist = await AudioDbService.searchArtist(artistName);
-
         if (!mounted) return;
-
         if (artist != null) {
-          setState(() {
-            artistSpotlight = artist;
-          });
+          setState(() => artistSpotlight = artist);
           return;
         }
       } catch (_) {
@@ -214,13 +230,64 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadCurrencyRates() async {
     try {
       final rates = await ExchangeRateService.getIdrRates();
+      if (!mounted) return;
+      setState(() => currencyRates = rates);
+    } catch (_) {}
+  }
+
+  Future<void> _loadNearestMusicStore() async {
+    if (!mounted) return;
+    setState(() => isLoadingNearestStore = true);
+
+    try {
+      final location = await LocationService.getCurrentLocation();
+      if (location['success'] != true) {
+        if (!mounted) return;
+        setState(() {
+          nearestMusicStore = null;
+          isLoadingNearestStore = false;
+        });
+        return;
+      }
+
+      final latitude = location['latitude'];
+      final longitude = location['longitude'];
+
+      if (latitude is! double || longitude is! double) {
+        if (!mounted) return;
+        setState(() {
+          nearestMusicStore = null;
+          isLoadingNearestStore = false;
+        });
+        return;
+      }
+
+      final result = await NearbyMusicStoreService.getNearbyStores(
+        latitude: latitude,
+        longitude: longitude,
+      );
 
       if (!mounted) return;
 
+      if (result['success'] == true) {
+        final stores = List<Map<String, dynamic>>.from(result['stores'] ?? []);
+        setState(() {
+          nearestMusicStore = stores.isEmpty ? null : stores.first;
+          isLoadingNearestStore = false;
+        });
+      } else {
+        setState(() {
+          nearestMusicStore = null;
+          isLoadingNearestStore = false;
+        });
+      }
+    } catch (_) {
+      if (!mounted) return;
       setState(() {
-        currencyRates = rates;
+        nearestMusicStore = null;
+        isLoadingNearestStore = false;
       });
-    } catch (_) {}
+    }
   }
 
   Future<void> _togglePreview(Map<String, dynamic> track) async {
@@ -240,39 +307,21 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       if (playingPreviewUrl == preview && audioPlayer.playing) {
         await audioPlayer.pause();
-
         if (!mounted) return;
-
-        setState(() {
-          playingPreviewUrl = null;
-        });
-
+        setState(() => playingPreviewUrl = null);
         return;
       }
 
       await audioPlayer.stop();
       await audioPlayer.setUrl(preview);
-
       if (!mounted) return;
-
-      setState(() {
-        playingPreviewUrl = preview;
-      });
-
+      setState(() => playingPreviewUrl = preview);
       await audioPlayer.play();
-
       if (!mounted) return;
-
-      setState(() {
-        playingPreviewUrl = null;
-      });
+      setState(() => playingPreviewUrl = null);
     } catch (_) {
       if (!mounted) return;
-
-      setState(() {
-        playingPreviewUrl = null;
-      });
-
+      setState(() => playingPreviewUrl = null);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Preview lagu belum bisa diputar.'),
@@ -291,10 +340,10 @@ class _HomeScreenState extends State<HomeScreen> {
         ? track['artist'].toString()
         : track['artistName']?.toString() ?? '';
 
-    final query = [
-      title,
-      artist,
-    ].where((item) => item.trim().isNotEmpty).join(' ').trim();
+    final query = [title, artist]
+        .where((item) => item.trim().isNotEmpty)
+        .join(' ')
+        .trim();
 
     Navigator.pushNamed(
       context,
@@ -306,106 +355,42 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<void> _loadNearestMusicStore() async {
-    if (!mounted) return;
-
-    setState(() {
-      isLoadingNearestStore = true;
-    });
-
-    try {
-      final location = await LocationService.getCurrentLocation();
-
-      if (location['success'] != true) {
-        if (!mounted) return;
-
-        setState(() {
-          nearestMusicStore = null;
-          isLoadingNearestStore = false;
-        });
-        return;
-      }
-
-      final latitude = location['latitude'];
-      final longitude = location['longitude'];
-
-      if (latitude is! double || longitude is! double) {
-        if (!mounted) return;
-
-        setState(() {
-          nearestMusicStore = null;
-          isLoadingNearestStore = false;
-        });
-        return;
-      }
-
-      final result = await NearbyMusicStoreService.getNearbyStores(
-        latitude: latitude,
-        longitude: longitude,
-      );
-
-      if (!mounted) return;
-
-      if (result['success'] == true) {
-        final stores = List<Map<String, dynamic>>.from(result['stores'] ?? []);
-
-        setState(() {
-          nearestMusicStore = stores.isEmpty ? null : stores.first;
-          isLoadingNearestStore = false;
-        });
-      } else {
-        setState(() {
-          nearestMusicStore = null;
-          isLoadingNearestStore = false;
-        });
-      }
-    } catch (_) {
-      if (!mounted) return;
-
-      setState(() {
-        nearestMusicStore = null;
-        isLoadingNearestStore = false;
-      });
-    }
-  }
-
-  void _openFilteredHistory(String query) {
-    Navigator.pushNamed(context, '/history', arguments: {'query': query});
-  }
-
   void _goToTab(int index) {
     widget.onNavigate?.call(index);
   }
 
   String _firstName() {
     final parts = userName.trim().split(RegExp(r'\s+'));
-    return parts.isEmpty ? 'Pengguna' : parts.first;
+    return parts.isEmpty ? 'Music Enthusiast' : parts.first;
+  }
+
+  String _formatActivityTime(String? rawDate) {
+    if (rawDate == null) return 'Baru saja';
+
+    final date = DateTime.tryParse(rawDate);
+    if (date == null) return 'Baru saja';
+
+    final now = DateTime.now();
+    final difference = now.difference(date);
+
+    if (difference.inMinutes < 1) return 'Baru saja';
+    if (difference.inHours < 1) return '${difference.inMinutes} menit lalu';
+    if (difference.inDays < 1) return '${difference.inHours} jam lalu';
+    return '${difference.inDays} hari lalu';
   }
 
   String _formatSchedule(Map<String, dynamic> item) {
-    final now = DateTime.now();
-    final month = item['month'] is int ? item['month'] as int : now.month;
-    final date = item['date'] is int ? item['date'] as int : now.day;
-    final hour = item['hour'] is int ? item['hour'] as int : 0;
-    final minute = item['minute'] is int ? item['minute'] as int : 0;
-    final zone = item['zone']?.toString() ?? 'WIB';
+    final practice = item['practice']?.toString() ??
+        item['practice_type']?.toString() ??
+        item['title']?.toString() ??
+        'Latihan';
+    final target = item['target']?.toString() ?? 'Target latihan';
+    final date = item['date']?.toString() ?? '-';
+    final time = item['time']?.toString() ??
+        '${(item['hour'] ?? 0).toString().padLeft(2, '0')}:${(item['minute'] ?? 0).toString().padLeft(2, '0')}';
+    final zone = item['timezone']?.toString() ?? item['zone']?.toString() ?? 'WIB';
 
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'Mei',
-      'Jun',
-      'Jul',
-      'Agu',
-      'Sep',
-      'Okt',
-      'Nov',
-      'Des',
-    ];
-
-    return '$date ${months[month - 1]} • ${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')} $zone';
+    return '$practice • $target\n$time $zone • $date';
   }
 
   String _moneyInsight() {
@@ -418,8 +403,33 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final usdValue = 1000000 * usd;
     final eurValue = 1000000 * eur;
-
     return 'IDR 1.000.000 ≈ USD ${usdValue.toStringAsFixed(2)} • EUR ${eurValue.toStringAsFixed(2)}';
+  }
+
+  String _trackAlbumImage(Map<String, dynamic> track) {
+    final candidates = [
+      track['album_cover_big'],
+      track['album_cover_medium'],
+      track['album_cover'],
+      track['cover_big'],
+      track['cover_medium'],
+      track['cover'],
+      track['album'] is Map ? track['album']['cover_big'] : null,
+      track['album'] is Map ? track['album']['cover_medium'] : null,
+      track['album'] is Map ? track['album']['cover'] : null,
+      track['artworkUrl100'],
+      track['artworkUrl60'],
+      track['image'],
+    ];
+
+    for (final candidate in candidates) {
+      final url = candidate?.toString() ?? '';
+      if (url.trim().isNotEmpty && url.startsWith('http')) {
+        return url;
+      }
+    }
+
+    return '';
   }
 
   Widget _card({required Widget child, EdgeInsets? padding, Color? color}) {
@@ -432,7 +442,7 @@ class _HomeScreenState extends State<HomeScreen> {
         border: Border.all(color: _border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.24),
+            color: Colors.black.withOpacity(0.24),
             blurRadius: 22,
             offset: const Offset(0, 12),
           ),
@@ -450,19 +460,13 @@ class _HomeScreenState extends State<HomeScreen> {
       onTap: () => _goToTab(4),
       borderRadius: BorderRadius.circular(999),
       child: Container(
-        width: 44,
-        height: 44,
+        width: 48,
+        height: 48,
         padding: const EdgeInsets.all(2),
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          gradient: const LinearGradient(colors: [_cyan, _purple, _pink]),
-          boxShadow: [
-            BoxShadow(
-              color: _cyan.withValues(alpha: 0.18),
-              blurRadius: 18,
-              offset: const Offset(0, 8),
-            ),
-          ],
+          border: Border.all(color: _border),
+          color: _surface,
         ),
         child: Container(
           clipBehavior: Clip.antiAlias,
@@ -472,7 +476,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           child: hasImage
               ? Image.file(File(path), fit: BoxFit.cover)
-              : const Icon(Icons.person_rounded, color: _muted, size: 24),
+              : const Icon(Icons.person_outline_rounded, color: _purple, size: 28),
         ),
       ),
     );
@@ -481,48 +485,27 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildHeader() {
     return Row(
       children: [
-        Container(
-          width: 64,
-          height: 64,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(21),
-            boxShadow: [
-              BoxShadow(
-                color: _purple.withValues(alpha: 0.28),
-                blurRadius: 24,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: Image.asset(
-            'assets/images/pitch_perfect_logo.png',
-            fit: BoxFit.cover,
-          ),
-        ),
-        const SizedBox(width: 14),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Pitch Perfect',
+                'Selamat Datang,',
                 style: TextStyle(
-                  color: _text,
-                  fontSize: 23,
-                  fontWeight: FontWeight.w900,
-                  height: 1.1,
+                  color: _muted,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(height: 5),
+              const SizedBox(height: 4),
               Text(
-                'Halo, ${_firstName()}',
+                '${_firstName()} 👋',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  color: _muted,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
+                  color: _text,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
             ],
@@ -533,296 +516,180 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildQuickActions() {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      crossAxisSpacing: 12,
-      mainAxisSpacing: 12,
-      physics: const NeverScrollableScrollPhysics(),
-      childAspectRatio: 1.55,
+  Widget _sectionTitle(String title, {String? actionText, VoidCallback? onAction}) {
+    return Row(
       children: [
-        _quickAction(
-          icon: Icons.graphic_eq_rounded,
-          title: 'Tes Nada',
-          color: _purple,
-          onTap: () => _goToTab(1),
+        Expanded(
+          child: Text(
+            title.toUpperCase(),
+            style: const TextStyle(
+              color: _muted,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.8,
+            ),
+          ),
         ),
-        _quickAction(
-          icon: Icons.build_rounded,
-          title: 'Tools',
-          color: _cyan,
-          onTap: () => _goToTab(2),
-        ),
-        _quickAction(
-          icon: Icons.psychology_rounded,
-          title: 'AI Coach',
-          color: _pink,
-          onTap: () => Navigator.pushNamed(context, '/ai-coach'),
-        ),
-        _quickAction(
-          icon: Icons.library_music_rounded,
-          title: 'Referensi Musik',
-          color: _green,
-          onTap: () => Navigator.pushNamed(context, '/music-reference'),
-        ),
+        if (actionText != null && onAction != null)
+          TextButton(
+            onPressed: onAction,
+            child: Text(
+              actionText,
+              style: const TextStyle(
+                color: _pink,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
       ],
     );
   }
 
-  Widget _quickAction({
-    required IconData icon,
-    required String title,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(24),
-      child: Ink(
-        padding: const EdgeInsets.all(15),
-        decoration: BoxDecoration(
-          color: _surface,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: color.withValues(alpha: 0.24)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: Icon(icon, color: color, size: 22),
-            ),
-            const SizedBox(width: 11),
-            Expanded(
-              child: Text(
-                title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: _text,
-                  fontSize: 13,
-                  height: 1.2,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _sectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Text(
-        title,
-        style: const TextStyle(
-          color: _text,
-          fontSize: 20,
-          fontWeight: FontWeight.w900,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMusicRecommendation() {
-    if (isLoadingMusic) {
-      return _card(
-        child: const Row(
-          children: [
-            CircularProgressIndicator(color: _purple),
-            SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                'Menyiapkan rekomendasi musik...',
-                style: TextStyle(color: _muted, fontWeight: FontWeight.w700),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (musicRecommendations.isEmpty) {
-      return _card(
-        child: Row(
-          children: [
-            const Icon(Icons.music_note_rounded, color: _purple, size: 30),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Text(
-                'Rekomendasi belum muncul. Buka Referensi Musik untuk mencari lagu latihan.',
-                style: TextStyle(
-                  color: _muted,
-                  height: 1.45,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            IconButton(
-              onPressed: _loadMusicRecommendations,
-              icon: const Icon(Icons.refresh_rounded),
-              color: _cyan,
-              tooltip: 'Muat ulang rekomendasi',
-            ),
-          ],
-        ),
-      );
-    }
+  Widget _buildSummaryCard() {
+    final accuracy = averageScore ?? 0;
+    final bestScore = gameRecords['best_score'] ?? 0;
 
     return _card(
+      padding: const EdgeInsets.all(18),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Untuk latihan hari ini',
-            style: TextStyle(
-              color: _text,
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 12),
-          ...musicRecommendations.take(3).map((track) {
-            final cover = track['cover']?.toString().isNotEmpty == true
-                ? track['cover'].toString()
-                : track['artwork']?.toString().isNotEmpty == true
-                ? track['artwork'].toString()
-                : track['image']?.toString() ?? '';
-            final title = track['title']?.toString().isNotEmpty == true
-                ? track['title'].toString()
-                : track['trackName']?.toString() ?? 'Lagu';
-            final artist = track['artist']?.toString().isNotEmpty == true
-                ? track['artist'].toString()
-                : track['artistName']?.toString().isNotEmpty == true
-                ? track['artistName'].toString()
-                : track['subtitle']?.toString() ?? 'Artist';
-
-            final preview =
-                track['preview']?.toString() ??
-                track['previewUrl']?.toString() ??
-                '';
-            final isPlaying =
-                preview.isNotEmpty && playingPreviewUrl == preview;
-
-            return InkWell(
-              onTap: () => _openMusicReference(track),
-              borderRadius: BorderRadius.circular(18),
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.all(8),
+          Row(
+            children: [
+              Container(
+                width: 56,
+                height: 56,
                 decoration: BoxDecoration(
-                  color: _surfaceSoft.withValues(alpha: 0.45),
+                  gradient: const LinearGradient(colors: [_purple, _pink]),
                   borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: _border),
                 ),
-                child: Row(
+                child: const Icon(Icons.trending_up_rounded, color: Colors.white, size: 30),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(14),
-                      child: cover.isEmpty
-                          ? Container(
-                              width: 52,
-                              height: 52,
-                              color: _surfaceSoft,
-                              child: const Icon(
-                                Icons.album_rounded,
-                                color: _cyan,
-                              ),
-                            )
-                          : Image.network(
-                              cover,
-                              width: 52,
-                              height: 52,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Container(
-                                  width: 52,
-                                  height: 52,
-                                  color: _surfaceSoft,
-                                  child: const Icon(
-                                    Icons.album_rounded,
-                                    color: _cyan,
-                                  ),
-                                );
-                              },
-                            ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: _text,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            artist,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: _muted,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'Ketuk lagu untuk lihat detail',
-                            style: TextStyle(
-                              color: Color(0xFF7E84A8),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
+                    Text(
+                      '$accuracy%',
+                      style: const TextStyle(
+                        color: _text,
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      onPressed: () => _togglePreview(track),
-                      icon: Icon(
-                        isPlaying
-                            ? Icons.pause_circle_filled_rounded
-                            : Icons.play_circle_fill_rounded,
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Akurasi rata-rata latihan',
+                      style: TextStyle(
+                        color: _muted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
                       ),
-                      color: _cyan,
-                      tooltip: isPlaying ? 'Pause' : 'Play',
                     ),
                   ],
                 ),
               ),
-            );
-          }),
-          const SizedBox(height: 4),
-          SizedBox(
-            height: 44,
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => Navigator.pushNamed(context, '/music-reference'),
-              icon: const Icon(Icons.library_music_rounded),
-              label: const Text('Lihat Referensi Musik'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: _cyan,
-                side: const BorderSide(color: _border),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+              Icon(
+                Icons.emoji_events_outlined,
+                color: _muted.withOpacity(0.20),
+                size: 72,
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: _summaryMiniCard(
+                  title: 'AKTIVITAS',
+                  value: '$totalSessions',
+                  subtitle: 'Total tersimpan',
+                  color: _cyan,
                 ),
               ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _summaryMiniCard(
+                  title: 'MINGGU INI',
+                  value: '$weeklySessions',
+                  subtitle: 'Latihan baru',
+                  color: _green,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _summaryMiniCard(
+                  title: 'AKURASI',
+                  value: '$accuracy%',
+                  subtitle: 'Rata-rata skor',
+                  color: _pink,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _summaryMiniCard(
+                  title: 'GAMES',
+                  value: '$bestScore',
+                  subtitle: 'Skor terbaik',
+                  color: _purple,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryMiniCard({
+    required String title,
+    required String value,
+    required String subtitle,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: _bg.withOpacity(0.45),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: _muted,
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.4,
+            ),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color,
+              fontSize: 17,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: _muted,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -830,136 +697,218 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildArtistAndMoney() {
-    final artistName =
-        artistSpotlight?['strArtist']?.toString() ?? 'Inspirasi artis';
-    final artistGenre =
-        artistSpotlight?['strGenre']?.toString() ?? 'Cari inspirasi musik';
-    final image = artistSpotlight?['strArtistThumb']?.toString() ?? '';
-
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: _compactCard(
-                icon: Icons.album_rounded,
-                title: artistName,
-                subtitle: artistGenre,
-                imageUrl: image,
-                color: _purple,
-                onTap: () => Navigator.pushNamed(context, '/music-reference'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _compactCard(
-                icon: Icons.currency_exchange_rounded,
-                title: 'Estimasi Biaya',
-                subtitle: _moneyInsight(),
-                color: _green,
-                onTap: () => Navigator.pushNamed(context, '/instrument-prices'),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        SizedBox(
-          height: 42,
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: () async {
-              await Future.wait([
-                _loadMusicRecommendations(),
-                _loadArtistSpotlight(),
-                _loadCurrencyRates(),
-              ]);
-            },
-            icon: const Icon(Icons.refresh_rounded),
-            label: const Text('Muat Ulang Rekomendasi'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: _cyan,
-              side: const BorderSide(color: _border),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
+  Widget _buildQuickActions() {
+    return _card(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      child: Row(
+        children: [
+          Expanded(
+            child: _quickCircleAction(
+              icon: Icons.piano_rounded,
+              title: 'Rencana',
+              color: _purple,
+              onTap: () => Navigator.pushNamed(context, '/instrument-prices'),
             ),
           ),
-        ),
-      ],
+          Expanded(
+            child: _quickCircleAction(
+              icon: Icons.calendar_month_rounded,
+              title: 'Jadwal',
+              color: _cyan,
+              onTap: () => Navigator.pushNamed(context, '/scheduler'),
+            ),
+          ),
+          Expanded(
+            child: _quickCircleAction(
+              icon: Icons.psychology_rounded,
+              title: 'AI Coach',
+              color: _pink,
+              onTap: () => Navigator.pushNamed(context, '/ai-coach'),
+            ),
+          ),
+          Expanded(
+            child: _quickCircleAction(
+              icon: Icons.storefront_rounded,
+              title: 'Terdekat',
+              color: _green,
+              onTap: () => Navigator.pushNamed(context, '/nearby'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _compactCard({
+  Widget _quickCircleAction({
     required IconData icon,
     required String title,
-    required String subtitle,
     required Color color,
     required VoidCallback onTap,
-    String imageUrl = '',
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(24),
-      child: Ink(
-        height: 178,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: _surface,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: color.withValues(alpha: 0.22)),
+      borderRadius: BorderRadius.circular(999),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 58,
+            height: 58,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: color.withOpacity(0.25),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Icon(icon, color: Colors.white, size: 27),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: _muted,
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMusicRecommendations() {
+    if (isLoadingMusic) {
+      return SizedBox(
+        height: 210,
+        child: Center(
+          child: CircularProgressIndicator(color: _cyan.withOpacity(0.9)),
         ),
+      );
+    }
+
+    if (musicRecommendations.isEmpty) {
+      return _card(
+        child: const Text(
+          'Rekomendasi lagu belum tersedia. Coba refresh halaman ini.',
+          style: TextStyle(color: _muted, fontWeight: FontWeight.w700),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 210,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        itemCount: musicRecommendations.length,
+        separatorBuilder: (context, index) => const SizedBox(width: 14),
+        itemBuilder: (context, index) {
+          return _musicCard(musicRecommendations[index]);
+        },
+      ),
+    );
+  }
+
+  Widget _musicCard(Map<String, dynamic> track) {
+    final title = track['title']?.toString().isNotEmpty == true
+        ? track['title'].toString()
+        : track['trackName']?.toString() ?? 'Lagu';
+    final artist = track['artist']?.toString().isNotEmpty == true
+        ? track['artist'].toString()
+        : track['artistName']?.toString() ?? 'Artis';
+    final image = _trackAlbumImage(track);
+    final preview =
+        track['preview']?.toString() ?? track['previewUrl']?.toString() ?? '';
+    final isPlaying = preview.isNotEmpty && playingPreviewUrl == preview;
+
+    return SizedBox(
+      width: 158,
+      child: InkWell(
+        onTap: () => _openMusicReference(track),
+        borderRadius: BorderRadius.circular(26),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            imageUrl.isEmpty
-                ? Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.13),
-                      borderRadius: BorderRadius.circular(15),
+            Stack(
+              children: [
+                Container(
+                  width: 158,
+                  height: 158,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF2B1D55), Color(0xFF0F3B4F)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                    child: Icon(icon, color: color, size: 22),
-                  )
-                : ClipRRect(
-                    borderRadius: BorderRadius.circular(15),
-                    child: Image.network(
-                      imageUrl,
-                      width: 42,
-                      height: 42,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          width: 42,
-                          height: 42,
-                          color: color.withValues(alpha: 0.13),
-                          child: Icon(icon, color: color, size: 22),
-                        );
-                      },
+                    borderRadius: BorderRadius.circular(26),
+                    border: Border.all(color: _border),
+                  ),
+                  child: image.isEmpty
+                      ? const Center(
+                          child: Icon(Icons.music_note_rounded, color: _pink, size: 44),
+                        )
+                      : Image.network(
+                          image,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const Center(
+                              child: Icon(Icons.music_note_rounded, color: _pink, size: 44),
+                            );
+                          },
+                        ),
+                ),
+                Positioned(
+                  right: 10,
+                  bottom: 10,
+                  child: InkWell(
+                    onTap: () => _togglePreview(track),
+                    borderRadius: BorderRadius.circular(999),
+                    child: Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: _bg.withOpacity(0.78),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: _border),
+                      ),
+                      child: Icon(
+                        isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                        color: Colors.white,
+                        size: 23,
+                      ),
                     ),
                   ),
-            const Spacer(),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
             Text(
               title,
-              maxLines: 2,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: _text,
                 fontSize: 14,
-                height: 1.2,
                 fontWeight: FontWeight.w900,
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 3),
             Text(
-              subtitle,
-              maxLines: 2,
+              artist,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: _muted,
-                fontSize: 11,
-                height: 1.3,
+                fontSize: 12,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -969,64 +918,57 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildSavedSnapshot() {
-    final schedule = latestSchedules.isNotEmpty ? latestSchedules.first : null;
-    final plan = latestInstrumentPlans.isNotEmpty
-        ? latestInstrumentPlans.first
-        : null;
-
-    final scheduleTitle = schedule == null
-        ? 'Belum ada jadwal latihan'
-        : '${schedule['practice_type'] ?? schedule['title'] ?? 'Jadwal latihan'}';
-
-    final scheduleSubtitle = schedule == null
-        ? 'Buat jadwal latihan agar muncul di sini.'
-        : '${schedule['day'] ?? 'Jadwal'} • ${schedule['local_time'] ?? schedule['time'] ?? '-'} ${schedule['zone'] ?? 'WIB'}';
-
-    final planTitle = plan == null
-        ? 'Belum ada rencana alat'
-        : '${plan['name'] ?? 'Rencana alat musik'}';
-
-    final planSubtitle = plan == null
-        ? 'Simpan rencana beli alat musik agar muncul di sini.'
-        : '${plan['category'] ?? 'Alat musik'} • ${plan['converted_price'] ?? plan['price'] ?? '-'}';
+  Widget _buildContinueSection() {
+    final latestSchedule = practiceSchedules.isEmpty ? null : practiceSchedules.first;
+    final latestPlan = instrumentPlans.isEmpty ? null : instrumentPlans.first;
+    final lastActivity = historyItems.isEmpty ? null : historyItems.first;
 
     return Column(
       children: [
-        _savedSnapshotCard(
-          icon: Icons.location_on_rounded,
-          title: nearestMusicStore == null
-              ? 'Tempat Musik Terdekat'
-              : '${nearestMusicStore!['name'] ?? 'Tempat Musik Terdekat'}',
-          subtitle: isLoadingNearestStore
-              ? 'Mencari tempat musik terdekat...'
-              : nearestMusicStore == null
-              ? 'Buka peta untuk melihat toko/tempat musik di sekitarmu.'
-              : '${nearestMusicStore!['type'] ?? 'Tempat Musik'} • ${nearestMusicStore!['distance_text'] ?? 'Jarak belum tersedia'}',
-          color: _cyan,
-          onTap: () => Navigator.pushNamed(context, '/nearby'),
-        ),
+        _buildArtistSpotlight(),
         const SizedBox(height: 12),
-        _savedSnapshotCard(
+        _continueCard(
           icon: Icons.calendar_month_rounded,
-          title: scheduleTitle,
-          subtitle: scheduleSubtitle,
-          color: _purple,
-          onTap: () => _openFilteredHistory('Smart Practice Scheduler'),
+          title: latestSchedule == null
+              ? 'Smart Practice Scheduler'
+              : latestSchedule['practice']?.toString() ??
+                  latestSchedule['practice_type']?.toString() ??
+                  'Smart Practice Scheduler',
+          subtitle: latestSchedule == null
+              ? 'Atur jadwal latihan dan reminder harianmu.'
+              : _formatSchedule(latestSchedule).replaceAll('\n', ' • '),
+          color: _cyan,
+          onTap: () => Navigator.pushNamed(context, '/scheduler'),
         ),
         const SizedBox(height: 12),
-        _savedSnapshotCard(
+        _continueCard(
           icon: Icons.piano_rounded,
-          title: planTitle,
-          subtitle: planSubtitle,
+          title: latestPlan == null
+              ? 'Rencana Beli Alat Musik'
+              : latestPlan['name']?.toString() ?? 'Rencana Beli Alat Musik',
+          subtitle: latestPlan == null
+              ? _moneyInsight()
+              : latestPlan['converted_price']?.toString() ?? _moneyInsight(),
+          color: _purple,
+          onTap: () => Navigator.pushNamed(context, '/instrument-prices'),
+        ),
+        const SizedBox(height: 12),
+        _continueCard(
+          icon: Icons.history_rounded,
+          title: lastActivity == null
+              ? 'Riwayat Aktivitas'
+              : lastActivity['title']?.toString() ?? 'Aktivitas Terakhir',
+          subtitle: lastActivity == null
+              ? 'Lihat kembali aktivitas dan progress latihanmu.'
+              : '${lastActivity['type'] ?? 'Aktivitas'} • ${_formatActivityTime(lastActivity['created_at']?.toString())}',
           color: _green,
-          onTap: () => _openFilteredHistory('Rencana Beli Alat'),
+          onTap: () => Navigator.pushNamed(context, '/history'),
         ),
       ],
     );
   }
 
-  Widget _savedSnapshotCard({
+  Widget _continueCard({
     required IconData icon,
     required String title,
     required String subtitle,
@@ -1035,20 +977,189 @@ class _HomeScreenState extends State<HomeScreen> {
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(20),
       child: Container(
-        padding: const EdgeInsets.all(15),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: _surface,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: color.withValues(alpha: 0.22)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.18),
-              blurRadius: 16,
-              offset: const Offset(0, 8),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: _border),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.16),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(icon, color: color, size: 27),
             ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _text,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _muted,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: _muted, size: 28),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildArtistSpotlight() {
+    final artist = artistSpotlight;
+    if (artist == null) {
+      return _continueCard(
+        icon: Icons.person_rounded,
+        title: 'Artist Spotlight',
+        subtitle: 'Cari referensi artis dan lagu untuk latihan musikmu.',
+        color: _pink,
+        onTap: () => Navigator.pushNamed(context, '/music-reference'),
+      );
+    }
+
+    final name = artist['strArtist']?.toString() ?? 'Artis Musik';
+    final genre = artist['strGenre']?.toString() ?? 'Referensi musik';
+    final image = artist['strArtistThumb']?.toString() ?? '';
+
+    return InkWell(
+      onTap: () => Navigator.pushNamed(context, '/music-reference'),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: _border),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                color: _pink.withOpacity(0.16),
+              ),
+              child: image.isEmpty
+                  ? const Icon(Icons.person_rounded, color: _pink)
+                  : Image.network(
+                      image,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(Icons.person_rounded, color: _pink);
+                      },
+                    ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'ARTIST SPOTLIGHT',
+                    style: TextStyle(
+                      color: _muted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.7,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _text,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    genre,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _muted,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: _muted, size: 28),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMoreCards() {
+    final storeName = nearestMusicStore?['name']?.toString();
+
+    return Column(
+      children: [
+        _smallDashboardCard(
+          icon: Icons.storefront_rounded,
+          title: storeName == null ? 'Tempat Musik Terdekat' : storeName,
+          subtitle: isLoadingNearestStore
+              ? 'Mencari toko musik terdekat...'
+              : storeName == null
+                  ? 'Cari toko musik, studio, dan tempat latihan di sekitar kamu.'
+                  : '${nearestMusicStore?['type'] ?? 'Tempat Musik'} • ${nearestMusicStore?['distance_text'] ?? 'jarak tersedia'}',
+          color: _green,
+          onTap: () => Navigator.pushNamed(context, '/nearby'),
+        ),
+      ],
+    );
+  }
+
+  Widget _smallDashboardCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: _border),
         ),
         child: Row(
           children: [
@@ -1056,10 +1167,10 @@ class _HomeScreenState extends State<HomeScreen> {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(17),
+                color: color.withOpacity(0.16),
+                borderRadius: BorderRadius.circular(15),
               ),
-              child: Icon(icon, color: color, size: 24),
+              child: Icon(icon, color: color, size: 25),
             ),
             const SizedBox(width: 13),
             Expanded(
@@ -1076,177 +1187,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       fontWeight: FontWeight.w900,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: _muted,
-                      fontSize: 12,
-                      height: 1.35,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            const Icon(
-              Icons.arrow_forward_ios_rounded,
-              color: Color(0xFF7E84A8),
-              size: 15,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildProgressSummary() {
-    final accuracy = averageScore == null ? '-' : '$averageScore%';
-    final bestScore = gameRecords['best_score'] ?? 0;
-
-    return _card(
-      child: Row(
-        children: [
-          _summaryItem('Aktivitas', '$totalSessions', Icons.history_rounded),
-          _divider(),
-          _summaryItem('Minggu Ini', '$weeklySessions', Icons.bolt_rounded),
-          _divider(),
-          _summaryItem('Akurasi', accuracy, Icons.insights_rounded),
-          _divider(),
-          _summaryItem('Game', '$bestScore', Icons.videogame_asset_rounded),
-        ],
-      ),
-    );
-  }
-
-  Widget _summaryItem(String label, String value, IconData icon) {
-    return Expanded(
-      child: Column(
-        children: [
-          Icon(icon, color: _purple, size: 22),
-          const SizedBox(height: 7),
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: _text,
-              fontSize: 17,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: _muted,
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _divider() {
-    return Container(width: 1, height: 48, color: _border);
-  }
-
-  Widget _buildNextSteps() {
-    final latestSchedule = practiceSchedules.isEmpty
-        ? null
-        : practiceSchedules.first;
-    final latestInstrument = instrumentPlans.isEmpty
-        ? null
-        : instrumentPlans.first;
-
-    return Column(
-      children: [
-        _smallFeature(
-          icon: Icons.notifications_active_rounded,
-          title: latestSchedule == null
-              ? 'Buat jadwal latihan'
-              : '${latestSchedule['practice_type'] ?? 'Latihan'} • ${latestSchedule['target'] ?? 'Target'}',
-          subtitle: latestSchedule == null
-              ? 'Atur waktu latihan dan reminder.'
-              : _formatSchedule(latestSchedule),
-          color: _green,
-          onTap: () => Navigator.pushNamed(context, '/scheduler'),
-        ),
-        const SizedBox(height: 12),
-        _smallFeature(
-          icon: Icons.piano_rounded,
-          title: latestInstrument == null
-              ? 'Rencana alat musik'
-              : latestInstrument['name']?.toString() ?? 'Alat tersimpan',
-          subtitle: latestInstrument == null
-              ? 'Simpan alat incaran dan estimasi biaya.'
-              : latestInstrument['converted_price']?.toString() ??
-                    'Estimasi tersimpan',
-          color: _cyan,
-          onTap: () => Navigator.pushNamed(context, '/instrument-prices'),
-        ),
-        const SizedBox(height: 12),
-        _smallFeature(
-          icon: Icons.location_on_rounded,
-          title: 'Tempat Musik',
-          subtitle: 'Cari toko, studio, atau kursus musik terdekat.',
-          color: _pink,
-          onTap: () => Navigator.pushNamed(context, '/nearby'),
-        ),
-      ],
-    );
-  }
-
-  Widget _smallFeature({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(24),
-      child: Ink(
-        padding: const EdgeInsets.all(15),
-        decoration: BoxDecoration(
-          color: _surface,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: color.withValues(alpha: 0.22)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.13),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Icon(icon, color: color, size: 23),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: _text,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 5),
                   Text(
                     subtitle,
                     maxLines: 2,
@@ -1261,11 +1202,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-            const Icon(
-              Icons.arrow_forward_ios_rounded,
-              color: Color(0xFF7E84A8),
-              size: 15,
-            ),
+            const Icon(Icons.chevron_right_rounded, color: _muted),
           ],
         ),
       ),
@@ -1279,27 +1216,34 @@ class _HomeScreenState extends State<HomeScreen> {
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _loadHome,
+          color: _purple,
+          backgroundColor: _surface,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 112),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
             children: [
               _buildHeader(),
-              const SizedBox(height: 22),
+              const SizedBox(height: 30),
+              _sectionTitle('Ringkasan Progres'),
+              const SizedBox(height: 14),
+              _buildSummaryCard(),
+              const SizedBox(height: 30),
               _sectionTitle('Akses Cepat'),
+              const SizedBox(height: 14),
               _buildQuickActions(),
-              const SizedBox(height: 24),
-              _sectionTitle('Rekomendasi'),
-              _buildMusicRecommendation(),
-              const SizedBox(height: 16),
-              _buildArtistAndMoney(),
-              const SizedBox(height: 24),
-              _sectionTitle('Tersimpan'),
-              _buildSavedSnapshot(),
-              const SizedBox(height: 24),
-              _sectionTitle('Ringkasan'),
-              _buildProgressSummary(),
-              const SizedBox(height: 24),
+              const SizedBox(height: 30),
+              _sectionTitle(
+                'Rekomendasi Lagu',
+                actionText: 'Lihat Semua',
+                onAction: () => Navigator.pushNamed(context, '/music-reference'),
+              ),
+              const SizedBox(height: 14),
+              _buildMusicRecommendations(),
+              const SizedBox(height: 30),
               _sectionTitle('Lanjutkan'),
-              _buildNextSteps(),
+              const SizedBox(height: 14),
+              _buildContinueSection(),
+              const SizedBox(height: 16),
+              _buildMoreCards(),
             ],
           ),
         ),
