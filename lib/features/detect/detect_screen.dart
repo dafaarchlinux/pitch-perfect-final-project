@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_pitch_detection/flutter_pitch_detection.dart';
-import 'package:noise_meter/noise_meter.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+
 import '../../services/practice_progress_service.dart';
 
 class DetectScreen extends StatefulWidget {
@@ -14,24 +15,32 @@ class DetectScreen extends StatefulWidget {
 }
 
 class _DetectScreenState extends State<DetectScreen> {
-  bool isGuitarMode = false;
+  static const Color _bg = Color(0xFF0B0D22);
+  static const Color _surface = Color(0xFF17182C);
+  static const Color _surfaceSoft = Color(0xFF232542);
+  static const Color _border = Color(0xFF2D3050);
+  static const Color _text = Color(0xFFF8FAFC);
+  static const Color _muted = Color(0xFF8EA0C8);
+  static const Color _purple = Color(0xFF8B5CF6);
+  static const Color _cyan = Color(0xFF22D3EE);
+  static const Color _pink = Color(0xFFFF4D73);
+  static const Color _green = Color(0xFF22C55E);
+  static const Color _yellow = Color(0xFFFACC15);
+  static const Color _orange = Color(0xFFF59E0B);
+
+  bool isGuitarMode = true;
   bool isDetecting = false;
-  bool silentRoomCheckEnabled = true;
-  bool isCheckingRoomNoise = false;
-  double? roomNoiseDb;
-  String roomNoiseStatus =
-      'Cek ruangan aktif. Aplikasi akan mengecek kebisingan sebelum mulai.';
+  bool isCheckingRoom = false;
 
   final FlutterPitchDetection pitchDetector = FlutterPitchDetection();
   StreamSubscription<Map<String, dynamic>>? pitchSubscription;
   StreamSubscription<AccelerometerEvent>? accelerometerSubscription;
-  StreamSubscription<GyroscopeEvent>? gyroscopeSubscription;
 
   DateTime lastShakeTime = DateTime.fromMillisecondsSinceEpoch(0);
-  DateTime lastGyroSwitchTime = DateTime.fromMillisecondsSinceEpoch(0);
 
   String detectedNote = '-';
   String detectedFrequencyText = '-';
+  String roomStatus = 'Belum dicek';
   double detectedFrequency = 0;
   double detectedAccuracy = 0;
   bool isSignalStable = false;
@@ -125,7 +134,7 @@ class _DetectScreenState extends State<DetectScreen> {
 
   String get tuningStatus {
     if (!isDetecting) {
-      return 'Pilih senar, lalu mulai stem gitar.';
+      return 'Pilih senar, lalu tekan Mulai Deteksi.';
     }
 
     if (detectedFrequency <= 0) {
@@ -151,7 +160,7 @@ class _DetectScreenState extends State<DetectScreen> {
 
   String get vocalStatus {
     if (!isDetecting) {
-      return 'Mulai tes, lalu nyanyikan satu nada.';
+      return 'Tekan Mulai Deteksi, lalu nyanyikan satu nada.';
     }
 
     if (detectedFrequency <= 0) {
@@ -165,17 +174,16 @@ class _DetectScreenState extends State<DetectScreen> {
     return 'Nada suara terbaca sebagai $detectedNote / $solfegeText.';
   }
 
-  Color get primaryColor =>
-      isGuitarMode ? const Color(0xFF7C4DFF) : const Color(0xFF00C6FF);
+  Color get primaryColor => isGuitarMode ? _purple : _cyan;
 
-  Color get secondaryColor =>
-      isGuitarMode ? const Color(0xFF5E35B1) : const Color(0xFF0072FF);
+  Color get secondaryColor => isGuitarMode
+      ? const Color(0xFF5E35B1)
+      : const Color(0xFF0072FF);
 
   @override
   void initState() {
     super.initState();
     _startShakeListener();
-    _startGyroscopeListener();
   }
 
   void _startShakeListener() {
@@ -194,33 +202,7 @@ class _DetectScreenState extends State<DetectScreen> {
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Mode diganti lewat shake HP.'),
-            behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 1),
-          ),
-        );
-      }
-    });
-  }
-
-  void _startGyroscopeListener() {
-    gyroscopeSubscription?.cancel();
-
-    gyroscopeSubscription = gyroscopeEventStream().listen((event) {
-      final rotationForce = event.x.abs() + event.y.abs() + event.z.abs();
-      final now = DateTime.now();
-      final cooldownDone =
-          now.difference(lastGyroSwitchTime).inMilliseconds > 1600;
-
-      if (rotationForce > 7.5 && cooldownDone && !isDetecting) {
-        lastGyroSwitchTime = now;
-        _toggleMode();
-
-        if (!mounted) return;
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Mode diganti lewat rotasi HP.'),
+            content: Text('Mode diganti lewat gerakan HP.'),
             behavior: SnackBarBehavior.floating,
             duration: Duration(seconds: 1),
           ),
@@ -289,7 +271,7 @@ class _DetectScreenState extends State<DetectScreen> {
       return;
     }
 
-    final minimumAccuracy = isGuitarMode ? 5 : 5;
+    const minimumAccuracy = 5;
 
     if (rawAccuracy > 0 && rawAccuracy < minimumAccuracy) {
       return;
@@ -304,168 +286,6 @@ class _DetectScreenState extends State<DetectScreen> {
       detectedAccuracy = rawAccuracy;
       isSignalStable = true;
     });
-  }
-
-  Future<void> _runSilentRoomCheck() async {
-    if (isCheckingRoomNoise) return;
-
-    setState(() {
-      isCheckingRoomNoise = true;
-      roomNoiseDb = null;
-      roomNoiseStatus = 'Mengecek kebisingan ruangan lewat mikrofon...';
-    });
-
-    final readings = <double>[];
-    StreamSubscription<NoiseReading>? noiseSubscription;
-
-    try {
-      final noiseMeter = NoiseMeter();
-
-      noiseSubscription = noiseMeter.noise.listen((reading) {
-        final double db = reading.meanDecibel.toDouble();
-
-        if (db.isFinite) {
-          readings.add(db);
-
-          if (mounted) {
-            setState(() {
-              roomNoiseDb = db;
-            });
-          }
-        }
-      });
-
-      await Future.delayed(const Duration(seconds: 2));
-      await noiseSubscription.cancel();
-
-      final double averageDb = readings.isEmpty
-          ? 0.0
-          : readings.reduce((a, b) => a + b) / readings.length;
-
-      final isQuietEnough = readings.isEmpty || averageDb <= 68;
-
-      if (!mounted) return;
-
-      setState(() {
-        isCheckingRoomNoise = false;
-        roomNoiseDb = averageDb;
-        roomNoiseStatus = isQuietEnough
-            ? 'Ruangan aman untuk test vokal.'
-            : 'Ruangan cukup bising untuk test vokal.';
-      });
-
-      _showRoomCheckDialog(isQuietEnough: isQuietEnough, averageDb: averageDb);
-    } catch (_) {
-      await noiseSubscription?.cancel();
-
-      if (!mounted) return;
-
-      setState(() {
-        isCheckingRoomNoise = false;
-        roomNoiseStatus =
-            'Cek ruangan belum bisa membaca mikrofon. Coba izinkan akses mikrofon.';
-      });
-
-      _showRoomCheckErrorDialog();
-    }
-  }
-
-  void _showRoomCheckDialog({
-    required bool isQuietEnough,
-    required double averageDb,
-  }) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF17182C),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-          ),
-          title: Row(
-            children: [
-              Icon(
-                isQuietEnough
-                    ? Icons.check_circle_rounded
-                    : Icons.volume_up_rounded,
-                color: isQuietEnough
-                    ? const Color(0xFF34D399)
-                    : const Color(0xFFFBBF24),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  isQuietEnough ? 'Ruangan Aman' : 'Ruangan Cukup Bising',
-                  style: const TextStyle(
-                    color: Color(0xFFF8FAFC),
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          content: Text(
-            isQuietEnough
-                ? 'Ruangan aman untuk test vokal. Kebisingan sekitar ${averageDb.toStringAsFixed(0)} dB.'
-                : 'Ruangan cukup bising, coba pindah ke tempat lebih sepi agar pembacaan nada lebih jelas. Kebisingan sekitar ${averageDb.toStringAsFixed(0)} dB.',
-            style: const TextStyle(
-              color: Color(0xFFB8BCD7),
-              height: 1.45,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Mengerti'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showRoomCheckErrorDialog() {
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF17182C),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-          ),
-          title: const Row(
-            children: [
-              Icon(Icons.mic_off_rounded, color: Color(0xFFF472B6)),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Cek Ruangan Gagal',
-                  style: TextStyle(
-                    color: Color(0xFFF8FAFC),
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          content: const Text(
-            'Aplikasi belum bisa membaca mikrofon untuk cek kebisingan. Pastikan izin mikrofon aktif.',
-            style: TextStyle(
-              color: Color(0xFFB8BCD7),
-              height: 1.45,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text('Mengerti'),
-            ),
-          ],
-        );
-      },
-    );
   }
 
   Future<void> _startDetection() async {
@@ -504,19 +324,78 @@ class _DetectScreenState extends State<DetectScreen> {
     }
   }
 
-  int? _calculateSessionScore() {
-    if (detectedFrequency <= 0 || !isSignalStable) return null;
+  Future<void> _checkRoomNoise() async {
+    if (isDetecting || isCheckingRoom) return;
 
-    if (isGuitarMode) {
-      final cents = centsDifference.abs();
-      return (100 - (cents * 2)).clamp(40, 100).round();
+    setState(() {
+      isCheckingRoom = true;
+      roomStatus = 'Mengecek...';
+      _resetDetectionValue();
+    });
+
+    try {
+      await pitchDetector.startDetection();
+
+      int sampleCount = 0;
+      int detectedCount = 0;
+      double totalAccuracy = 0;
+
+      await pitchSubscription?.cancel();
+      pitchSubscription = pitchDetector.onPitchDetected.listen((data) {
+        final frequency = data['frequency'];
+        final accuracy = data['accuracy'];
+
+        sampleCount++;
+
+        if (frequency is num && frequency.toDouble() > 0) {
+          detectedCount++;
+        }
+
+        if (accuracy is num) {
+          totalAccuracy += accuracy.toDouble();
+        }
+      });
+
+      await Future.delayed(const Duration(seconds: 2));
+
+      await pitchSubscription?.cancel();
+      pitchSubscription = null;
+      await pitchDetector.stopDetection();
+
+      final averageAccuracy = sampleCount == 0 ? 0 : totalAccuracy / sampleCount;
+      final signalRatio = sampleCount == 0 ? 0 : detectedCount / sampleCount;
+
+      String result;
+      if (detectedCount == 0 || signalRatio < 0.2) {
+        result = 'Tenang (Optimal)';
+      } else if (signalRatio < 0.5 || averageAccuracy < 25) {
+        result = 'Cukup tenang';
+      } else {
+        result = 'Terlalu bising';
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        roomStatus = result;
+        isCheckingRoom = false;
+        _resetDetectionValue();
+      });
+    } catch (_) {
+      try {
+        await pitchSubscription?.cancel();
+        pitchSubscription = null;
+        await pitchDetector.stopDetection();
+      } catch (_) {}
+
+      if (!mounted) return;
+
+      setState(() {
+        roomStatus = 'Tidak bisa dicek';
+        isCheckingRoom = false;
+        _resetDetectionValue();
+      });
     }
-
-    if (detectedAccuracy > 0) {
-      return detectedAccuracy.clamp(40, 100).round();
-    }
-
-    return 75;
   }
 
   Future<void> _saveDetectionSession() async {
@@ -524,18 +403,15 @@ class _DetectScreenState extends State<DetectScreen> {
 
     final mode = isGuitarMode ? 'Tuner Gitar' : 'Deteksi Suara';
     final targetNote = isGuitarMode ? selectedString['note'].toString() : null;
-    final targetString = isGuitarMode
-        ? selectedString['label'].toString()
-        : null;
+    final targetString = isGuitarMode ? selectedString['label'].toString() : null;
     final status = isGuitarMode ? tuningStatus : vocalStatus;
-    final sessionScore = _calculateSessionScore();
 
     await PracticeProgressService.addPracticeSession(
       title: isGuitarMode
           ? 'Cek tuning $targetString $targetNote'
           : 'Deteksi suara $detectedNote / $solfegeText',
       type: 'Detect',
-      score: sessionScore,
+      score: null,
       level: null,
       combo: null,
       passed: isSignalStable,
@@ -551,6 +427,7 @@ class _DetectScreenState extends State<DetectScreen> {
             : '${detectedAccuracy.toStringAsFixed(0)}%',
         'status': status,
         'is_stable': isSignalStable,
+        'room_status': roomStatus,
       },
     );
   }
@@ -577,119 +454,72 @@ class _DetectScreenState extends State<DetectScreen> {
     }
   }
 
-  Widget _buildSilentRoomCheckCard() {
-    final noiseText = roomNoiseDb == null
-        ? 'Belum dicek'
-        : '${roomNoiseDb!.toStringAsFixed(0)} dB';
+  double get _displayAccuracy {
+    if (detectedFrequency <= 0) return 0;
+    if (isGuitarMode) {
+      return (100 - (centsDifference.abs() * 2)).clamp(0, 100).toDouble();
+    }
+    if (detectedAccuracy > 0) return detectedAccuracy.clamp(0, 100).toDouble();
+    return isSignalStable ? 75 : 0;
+  }
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              color: const Color(0xFF22D3EE).withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Icon(
-              isCheckingRoomNoise
-                  ? Icons.hearing_rounded
-                  : Icons.graphic_eq_rounded,
-              color: const Color(0xFF22D3EE),
-            ),
-          ),
-          const SizedBox(width: 13),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Silent Room Check',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '$roomNoiseStatus • $noiseText',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFFB8BCD7),
-                    fontSize: 12,
-                    height: 1.35,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: 38,
-                  child: ElevatedButton.icon(
-                    onPressed: isCheckingRoomNoise ? null : _runSilentRoomCheck,
-                    icon: Icon(
-                      isCheckingRoomNoise
-                          ? Icons.hourglass_top_rounded
-                          : Icons.mic_rounded,
-                      size: 18,
-                    ),
-                    label: Text(
-                      isCheckingRoomNoise ? 'Mengecek...' : 'Mulai Cek Ruangan',
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF22D3EE),
-                      foregroundColor: const Color(0xFF0B0D22),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      textStyle: const TextStyle(fontWeight: FontWeight.w900),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+  String get _mainStatusLabel {
+    if (!isDetecting) return 'SIAP';
+    if (detectedFrequency <= 0) return 'MENUNGGU';
+    if (!isSignalStable) return 'MEMBACA';
+    if (!isGuitarMode) return 'TERDETEKSI';
+    final cents = centsDifference;
+    if (cents.abs() <= 10) return 'PAS';
+    return cents < 0 ? 'TERLALU RENDAH' : 'TERLALU TINGGI';
+  }
+
+  Color get _statusColor {
+    if (!isDetecting) return _cyan;
+    if (detectedFrequency <= 0 || !isSignalStable) return _yellow;
+    if (!isGuitarMode) return _cyan;
+    final cents = centsDifference;
+    if (cents.abs() <= 10) return _green;
+    return cents < 0 ? _orange : _pink;
+  }
+
+  double get _needlePosition {
+    if (!isGuitarMode || detectedFrequency <= 0) return 0.5;
+    return ((centsDifference.clamp(-50, 50) + 50) / 100).clamp(0.0, 1.0);
+  }
+
+  String get _centerNoteText {
+    if (detectedFrequency > 0) return detectedNote.replaceAll(RegExp(r'[0-9]'), '');
+    if (isGuitarMode) return selectedString['shortNote'].toString();
+    return '-';
   }
 
   Widget _buildModeSwitcher() {
     return Container(
       padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
+        color: _surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        border: Border.all(color: _border),
       ),
       child: Row(
         children: [
           Expanded(
             child: _buildModeTab(
-              title: 'Test Vokal',
-              icon: Icons.mic_rounded,
-              selected: !isGuitarMode,
+              title: 'Tuner Gitar',
+              icon: Icons.music_note_rounded,
+              selected: isGuitarMode,
               onTap: () {
-                if (!isDetecting && isGuitarMode) _toggleMode();
+                if (!isDetecting && !isGuitarMode) _toggleMode();
               },
             ),
           ),
           Expanded(
             child: _buildModeTab(
-              title: 'Stem Gitar',
-              icon: Icons.music_note_rounded,
-              selected: isGuitarMode,
+              title: 'Deteksi Suara',
+              icon: Icons.mic_rounded,
+              selected: !isGuitarMode,
               onTap: () {
-                if (!isDetecting && !isGuitarMode) _toggleMode();
+                if (!isDetecting && isGuitarMode) _toggleMode();
               },
             ),
           ),
@@ -709,19 +539,15 @@ class _DetectScreenState extends State<DetectScreen> {
       borderRadius: BorderRadius.circular(14),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+        padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 10),
         decoration: BoxDecoration(
-          color: selected ? Colors.white : Colors.transparent,
+          color: selected ? primaryColor : Colors.transparent,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              icon,
-              size: 18,
-              color: selected ? secondaryColor : Colors.white70,
-            ),
+            Icon(icon, size: 18, color: selected ? Colors.white : _muted),
             const SizedBox(width: 7),
             Flexible(
               child: Text(
@@ -729,7 +555,7 @@ class _DetectScreenState extends State<DetectScreen> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: selected ? secondaryColor : Colors.white70,
+                  color: selected ? Colors.white : _muted,
                   fontWeight: FontWeight.w900,
                   fontSize: 13,
                 ),
@@ -741,43 +567,358 @@ class _DetectScreenState extends State<DetectScreen> {
     );
   }
 
-  Widget _buildGuitarStringSelector() {
+  Widget _buildHeader() {
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ShaderMask(
+                shaderCallback: (bounds) {
+                  return const LinearGradient(
+                    colors: [_cyan, Color(0xFF93C5FD), Color(0xFFC084FC)],
+                  ).createShader(bounds);
+                },
+                child: const Text(
+                  'Smart Tuner & Detector',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 25,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 7),
+              Text(
+                isGuitarMode ? 'MODE GITAR AKUSTIK' : 'MODE DETEKSI BEBAS',
+                style: const TextStyle(
+                  color: Color(0xFFB9C7FF),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 3,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: primaryColor.withOpacity(0.22),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: primaryColor.withOpacity(0.55)),
+          ),
+          child: Icon(
+            isGuitarMode ? Icons.music_note_rounded : Icons.mic_rounded,
+            color: const Color(0xFFD8B4FE),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMainTunerCard() {
+    final color = _statusColor;
+    final statusText = isGuitarMode ? tuningStatus : vocalStatus;
+
     return Container(
-      padding: const EdgeInsets.all(16),
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        color: _surface,
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(color: _border),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.10),
+            blurRadius: 30,
+            offset: const Offset(0, 14),
+          ),
+        ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Pilih senar yang mau distem',
+          Row(
+            children: [
+              _tuningLabel(Icons.arrow_downward_rounded, 'RENDAH', _orange),
+              const Spacer(),
+              _tuningLabel(Icons.check_circle_outline_rounded, 'PAS', _green),
+              const Spacer(),
+              _tuningLabel(Icons.arrow_upward_rounded, 'TINGGI', _pink),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Container(
+            width: 148,
+            height: 148,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: color.withOpacity(0.75), width: 4),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withOpacity(0.16),
+                  blurRadius: 35,
+                  spreadRadius: 5,
+                ),
+              ],
+            ),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _centerNoteText,
+                    style: const TextStyle(
+                      color: _text,
+                      fontSize: 58,
+                      height: 1,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _mainStatusLabel,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            statusText,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: _muted,
+              fontSize: 13,
+              height: 1.4,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 18),
+          _buildNeedleBar(),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _handleMainButton,
+              icon: Icon(
+                isDetecting ? Icons.mic_off_rounded : Icons.mic_rounded,
+                color: isDetecting ? _pink : Colors.white,
+              ),
+              label: Text(
+                isDetecting ? 'Berhentikan Deteksi' : 'Mulai Deteksi',
+                style: TextStyle(
+                  color: isDetecting ? _pink : Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 15,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isDetecting ? _pink.withOpacity(0.14) : primaryColor,
+                side: BorderSide(color: isDetecting ? _pink : primaryColor),
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: isDetecting || isCheckingRoom ? null : _checkRoomNoise,
+              icon: Icon(
+                Icons.air_rounded,
+                color: isDetecting || isCheckingRoom ? _muted : _cyan,
+              ),
+              label: Text(
+                isCheckingRoom ? 'Mengecek Ruangan...' : 'Mulai Cek Ruangan',
+                style: TextStyle(
+                  color: isDetecting || isCheckingRoom ? _muted : _cyan,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 15,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _surfaceSoft,
+                disabledBackgroundColor: _surfaceSoft.withOpacity(0.65),
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 17),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(child: _metricCard('SOLFEGE', solfegeText, _text)),
+              const SizedBox(width: 10),
+              Expanded(child: _metricCard('NADA', detectedNote, _text)),
+              const SizedBox(width: 10),
+              Expanded(child: _metricCard('FREKUENSI', detectedFrequencyText, _cyan)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _metricCard(
+                  'AKURASI',
+                  _displayAccuracy <= 0 ? '-' : '${_displayAccuracy.round()}%',
+                  _text,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tuningLabel(IconData icon, String label, Color color) {
+    final status = _mainStatusLabel;
+    final active = status.contains(label) || (label == 'PAS' && status == 'PAS');
+    return Opacity(
+      opacity: active ? 1 : 0.35,
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 22),
+          const SizedBox(height: 5),
+          Text(
+            label,
             style: TextStyle(
-              color: Colors.white,
-              fontSize: 17,
+              color: color,
+              fontSize: 10,
               fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(height: 6),
-          const Text(
-            'Petik satu senar saja, jangan genjreng chord penuh.',
-            style: TextStyle(
-              color: Color(0xFFB8BBCC),
-              fontSize: 13,
-              height: 1.4,
-              fontWeight: FontWeight.w500,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNeedleBar() {
+    final position = _needlePosition;
+    final color = _statusColor;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final markerLeft = (width * position - 4).clamp(0.0, width - 8);
+        return SizedBox(
+          height: 18,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(
+                height: 10,
+                decoration: BoxDecoration(
+                  color: _bg,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: _border),
+                ),
+              ),
+              Center(
+                child: Container(
+                  width: 3,
+                  height: 18,
+                  color: _muted.withOpacity(0.55),
+                ),
+              ),
+              Positioned(
+                left: markerLeft,
+                child: Container(
+                  width: 9,
+                  height: 9,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(color: color.withOpacity(0.55), blurRadius: 12),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _metricCard(String title, String value, Color color) {
+    return Container(
+      height: 86,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: _bg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _border),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Color(0xFF78A0D4),
+              fontSize: 9,
+              fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: List.generate(guitarStrings.length, (index) {
+          const SizedBox(height: 9),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: color,
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGuitarStringSelector() {
+    if (!isGuitarMode) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'PILIH SENAR TARGET',
+          style: TextStyle(
+            color: _muted,
+            fontSize: 12,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 3,
+          ),
+        ),
+        const SizedBox(height: 14),
+        SizedBox(
+          height: 78,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: guitarStrings.length,
+            separatorBuilder: (context, index) => const SizedBox(width: 9),
+            itemBuilder: (context, index) {
               final item = guitarStrings[index];
               final selected = selectedStringIndex == index;
-
               return InkWell(
                 onTap: isDetecting
                     ? null
@@ -787,484 +928,122 @@ class _DetectScreenState extends State<DetectScreen> {
                           _resetDetectionValue();
                         });
                       },
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(17),
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 92,
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 12,
-                    horizontal: 10,
-                  ),
+                  duration: const Duration(milliseconds: 180),
+                  width: 105,
                   decoration: BoxDecoration(
-                    color: selected
-                        ? primaryColor
-                        : Colors.white.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: selected
-                          ? Colors.white.withValues(alpha: 0.26)
-                          : Colors.white.withValues(alpha: 0.08),
-                    ),
+                    color: selected ? _cyan.withOpacity(0.85) : _surface,
+                    borderRadius: BorderRadius.circular(17),
+                    border: Border.all(color: selected ? _cyan : _border),
                   ),
                   child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
                         item['shortNote'].toString(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 23,
+                        style: TextStyle(
+                          color: selected ? Colors.white : _text,
+                          fontSize: 21,
                           fontWeight: FontWeight.w900,
                         ),
                       ),
-                      const SizedBox(height: 3),
+                      const SizedBox(height: 5),
                       Text(
                         item['label'].toString(),
-                        style: const TextStyle(
-                          color: Colors.white70,
+                        style: TextStyle(
+                          color: selected ? Colors.white70 : _muted,
                           fontSize: 11,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w900,
                         ),
                       ),
                     ],
                   ),
                 ),
               );
-            }),
+            },
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  Widget _buildNeedleTuner() {
-    final cents = centsDifference;
-    final clamped = cents.clamp(-50, 50).toDouble();
-    final alignmentX = clamped / 50;
-
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Column(
-        children: [
-          Text(
-            tuningStatus,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 17,
-              height: 1.35,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 18),
-          SizedBox(
-            height: 74,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  top: 32,
-                  child: Container(
-                    height: 12,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(999),
-                      gradient: const LinearGradient(
-                        colors: [
-                          Color(0xFFFF8A65),
-                          Color(0xFF21C67A),
-                          Color(0xFFFF8A65),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const Positioned(
-                  top: 22,
-                  child: Text(
-                    'PAS',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-                AnimatedAlign(
-                  duration: const Duration(milliseconds: 220),
-                  alignment: Alignment(alignmentX, 0.2),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.arrow_drop_down_rounded,
-                        color: Colors.white,
-                        size: 42,
-                      ),
-                      Container(
-                        width: 6,
-                        height: 28,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Rendah',
-                  textAlign: TextAlign.left,
-                  style: TextStyle(
-                    color: Colors.white60,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              Text(
-                detectedFrequency <= 0
-                    ? 'Menunggu suara'
-                    : '${cents.toStringAsFixed(1)} cents',
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const Expanded(
-                child: Text(
-                  'Tinggi',
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    color: Colors.white60,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVocalDetector() {
-    final bool hasSound = detectedFrequency > 0;
-    final String noteText = hasSound ? detectedNote : '-';
-    final String solfege = hasSound ? solfegeText : '-';
-    final String frequencyText = hasSound ? detectedFrequencyText : '-';
-    final String accuracyText = detectedAccuracy <= 0
-        ? '-'
-        : '${detectedAccuracy.toStringAsFixed(0)}%';
-
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: primaryColor.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: const Icon(
-                  Icons.record_voice_over_rounded,
-                  color: Colors.white,
-                  size: 28,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Test Vokal',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      vocalStatus,
-                      style: const TextStyle(
-                        color: Color(0xFFD7DAE8),
-                        fontSize: 13,
-                        height: 1.4,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  primaryColor.withValues(alpha: 0.26),
-                  secondaryColor.withValues(alpha: 0.18),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-            ),
-            child: Column(
-              children: [
-                const Text(
-                  'SOLFEGE',
-                  style: TextStyle(
-                    color: Color(0xFFB8BBCC),
-                    fontSize: 11,
-                    letterSpacing: 1.0,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  solfege,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 54,
-                    fontWeight: FontWeight.w900,
-                    height: 1.0,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  hasSound
-                      ? 'Nada musik: $noteText'
-                      : 'Nyanyikan satu nada dengan jelas.',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                    height: 1.35,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              _buildVocalMiniInfo(
-                title: 'Nada',
-                value: noteText,
-                icon: Icons.music_note_rounded,
-              ),
-              const SizedBox(width: 10),
-              _buildVocalMiniInfo(
-                title: 'Frekuensi',
-                value: frequencyText,
-                icon: Icons.graphic_eq_rounded,
-              ),
-              const SizedBox(width: 10),
-              _buildVocalMiniInfo(
-                title: 'Akurasi',
-                value: accuracyText,
-                icon: Icons.verified_rounded,
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
-            ),
-            child: const Text(
-              'Cara pakai: mulai tes, nyanyikan satu nada, lalu lihat nada dan solfege yang terbaca.',
-              style: TextStyle(
-                color: Color(0xFFD7DAE8),
-                fontSize: 12,
-                height: 1.45,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVocalMiniInfo({
+  Widget _infoTile({
+    required IconData icon,
     required String title,
     required String value,
-    required IconData icon,
+    required Color color,
   }) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(13),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.07),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: Colors.white70, size: 20),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Color(0xFF9DA3BC),
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildResultCircle() {
-    final displayNote = detectedFrequency <= 0 ? '-' : detectedNote;
-    final displayFrequency = detectedFrequency <= 0
-        ? '-'
-        : detectedFrequencyText;
-
-    return Center(
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        width: 250,
-        height: 250,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: RadialGradient(
-            colors: [
-              primaryColor.withValues(alpha: 0.96),
-              secondaryColor,
-              const Color(0xFF1A1733),
-            ],
-            radius: 0.85,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: primaryColor.withValues(alpha: isDetecting ? 0.48 : 0.25),
-              blurRadius: isDetecting ? 42 : 28,
-              spreadRadius: isDetecting ? 8 : 4,
-            ),
-          ],
-        ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                displayNote,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 68,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                displayFrequency,
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Text(
-                  isDetecting ? 'Mikrofon Aktif' : 'Mikrofon Mati',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHowToUseCard() {
-    final text = isGuitarMode
-        ? '1. Pilih senar\n2. Mulai deteksi\n3. Petik satu senar dekat mikrofon\n4. Ikuti indikator tuning'
-        : '1. Mulai test vokal\n2. Nyanyikan satu nada\n3. Lihat nada dan solfege yang terbaca';
-
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(17),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        color: _surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _border),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline_rounded, color: Colors.amber, size: 26),
-          const SizedBox(width: 14),
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.16),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(icon, color: color, size: 23),
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: _muted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: _text,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _warningBox() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _orange.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: _orange.withOpacity(0.45)),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: _yellow, size: 24),
+          SizedBox(width: 12),
           Expanded(
             child: Text(
-              text,
-              style: const TextStyle(
-                color: Color(0xFFD7DAE8),
-                fontSize: 13,
-                height: 1.55,
-                fontWeight: FontWeight.w600,
+              'Peringatan: Pastikan sensor mikrofon diizinkan. Dekatkan sumber suara ke mikrofon agar hasil deteksi lebih stabil.',
+              style: TextStyle(
+                color: Color(0xFFFFD166),
+                fontSize: 12,
+                height: 1.4,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),
@@ -1283,140 +1062,54 @@ class _DetectScreenState extends State<DetectScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final targetNote = selectedString['note'].toString();
-    final targetFrequencyText =
-        '${(selectedString['frequency'] as double).toStringAsFixed(1)} Hz';
-    final accuracyText = detectedAccuracy <= 0
-        ? '-'
-        : '${detectedAccuracy.toStringAsFixed(0)}%';
-
     return Scaffold(
-      backgroundColor: const Color(0xFF0F1020),
+      backgroundColor: _bg,
+      appBar: AppBar(
+        backgroundColor: _bg,
+        elevation: 0,
+        centerTitle: true,
+        title: const Text(
+          'Detect',
+          style: TextStyle(
+            color: _text,
+            fontSize: 26,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(22, 18, 22, 28),
+          padding: const EdgeInsets.fromLTRB(18, 14, 18, 120),
           children: [
-            const Text(
-              'Detect',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 30,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Tes nada vokal atau stem gitar dengan mikrofon HP.',
-              style: TextStyle(
-                color: Color(0xFFB8BBCC),
-                fontSize: 14,
-                height: 1.45,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 18),
             _buildModeSwitcher(),
-            const SizedBox(height: 14),
-            _buildSilentRoomCheckCard(),
-            const SizedBox(height: 22),
-            if (isGuitarMode) _buildGuitarStringSelector(),
-            if (isGuitarMode) const SizedBox(height: 22),
-            _buildResultCircle(),
-            const SizedBox(height: 22),
+            const SizedBox(height: 18),
+            _buildMainTunerCard(),
+            const SizedBox(height: 24),
+            _buildGuitarStringSelector(),
+            if (isGuitarMode) const SizedBox(height: 24),
             Row(
               children: [
-                _buildSmallInfo(
-                  title: isGuitarMode ? 'Target Senar' : 'Nada',
-                  value: isGuitarMode ? targetNote : detectedNote,
-                  subtitle: isGuitarMode ? targetFrequencyText : solfegeText,
+                Expanded(
+                  child: _infoTile(
+                    icon: Icons.sensors_rounded,
+                    title: 'STATUS RUANG',
+                    value: roomStatus,
+                    color: roomStatus == 'Tenang (Optimal)' ? _green : _cyan,
+                  ),
                 ),
-                const SizedBox(width: 12),
-                _buildSmallInfo(
-                  title: 'Akurasi',
-                  value: accuracyText,
-                  subtitle: detectedFrequencyText,
+                const SizedBox(width: 14),
+                Expanded(
+                  child: _infoTile(
+                    icon: Icons.verified_user_rounded,
+                    title: 'KALIBRASI',
+                    value: 'Otomatis',
+                    color: _purple,
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 22),
-            isGuitarMode ? _buildNeedleTuner() : _buildVocalDetector(),
-            const SizedBox(height: 22),
-            _buildHowToUseCard(),
-            const SizedBox(height: 22),
-            SizedBox(
-              height: 56,
-              child: ElevatedButton.icon(
-                onPressed: _handleMainButton,
-                icon: Icon(
-                  isDetecting
-                      ? Icons.stop_circle_rounded
-                      : Icons.play_arrow_rounded,
-                ),
-                label: Text(isDetecting ? 'Berhenti Deteksi' : 'Mulai Deteksi'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isDetecting
-                      ? const Color(0xFFFF8A65)
-                      : primaryColor,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSmallInfo({
-    required String title,
-    required String value,
-    required String subtitle,
-  }) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(15),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.07),
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 23,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 5),
-            Text(
-              title,
-              style: const TextStyle(
-                color: Color(0xFF9DA3BC),
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              subtitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white54,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            const SizedBox(height: 18),
+            _warningBox(),
           ],
         ),
       ),
