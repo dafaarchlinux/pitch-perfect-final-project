@@ -184,31 +184,59 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: TextStyle(color: _text, fontWeight: FontWeight.w900),
           ),
           content: const Text(
-            'Session login akan dihapus dari perangkat ini.',
+            'Yakin ingin keluar dari akun ini? Kamu akan tetap bisa masuk kembali dengan email dan password yang sama.',
             style: TextStyle(
               color: _muted,
               height: 1.45,
               fontWeight: FontWeight.w600,
             ),
           ),
+          actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Batal'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.pop(dialogContext);
-                await _logout();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _pink,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    style: TextButton.styleFrom(
+                      foregroundColor: _muted,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      alignment: Alignment.center,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'Batal',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-              child: const Text('Keluar'),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      Navigator.pop(dialogContext);
+                      await _logout();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _pink,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Text(
+                      'Keluar',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         );
@@ -548,47 +576,55 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildMenus() {
-    return Column(
-      children: [
-        _menuTile(
-          icon: biometricEnabled
-              ? Icons.fingerprint_rounded
-              : Icons.fingerprint_outlined,
-          title: biometricEnabled ? 'Biometrik Aktif' : 'Aktifkan Biometrik',
-          subtitle: biometricEnabled
-              ? 'Login cepat dengan fingerprint sudah aktif.'
-              : 'Gunakan fingerprint untuk masuk lebih cepat.',
-          color: biometricEnabled ? _green : _cyan,
-          onTap: _toggleBiometric,
-        ),
-        const SizedBox(height: 12),
-        _menuTile(
-          icon: Icons.rate_review_rounded,
-          title: 'Saran & Kesan TPM',
-          subtitle: 'Tulis kesan dan saran untuk mata kuliah TPM.',
-          color: _cyan,
-          onTap: () => Navigator.pushNamed(context, '/feedback'),
-        ),
-        const SizedBox(height: 12),
-        _menuTile(
-          icon: Icons.history_rounded,
-          title: 'Riwayat Latihan',
-          subtitle: 'Lihat aktivitas, referensi musik, jadwal, dan progres.',
-          color: _purple,
-          onTap: () => Navigator.pushNamed(context, '/history'),
-        ),
-        const SizedBox(height: 12),
-        _menuTile(
-          icon: Icons.logout_rounded,
-          title: 'Logout',
-          subtitle: 'Keluar dari akun di perangkat ini.',
-          color: _pink,
-          onTap: _showLogoutDialog,
-        ),
-      ],
-    );
-  }
+Widget _buildMenus() {
+  return Column(
+    children: [
+      _menuTile(
+        icon: biometricEnabled
+            ? Icons.fingerprint_rounded
+            : Icons.fingerprint_outlined,
+        title: biometricEnabled ? 'Biometrik Aktif' : 'Aktifkan Biometrik',
+        subtitle: biometricEnabled
+            ? 'Login cepat dengan fingerprint sudah aktif.'
+            : 'Gunakan fingerprint untuk masuk lebih cepat.',
+        color: biometricEnabled ? _green : _cyan,
+        onTap: _toggleBiometric,
+      ),
+      const SizedBox(height: 14),
+      _menuTile(
+        icon: Icons.notifications_rounded,
+        title: 'Notifikasi',
+        subtitle: 'Lihat daftar pemberitahuan yang telah diterima.',
+        color: _cyan,
+        onTap: () => Navigator.pushNamed(context, '/notifications'),
+      ),
+      const SizedBox(height: 14),
+      _menuTile(
+        icon: Icons.history_rounded,
+        title: 'Riwayat Latihan',
+        subtitle: 'Lihat aktivitas, referensi musik, dan progres.',
+        color: _green,
+        onTap: () => Navigator.pushNamed(context, '/history'),
+      ),
+      const SizedBox(height: 14),
+      _menuTile(
+        icon: Icons.chat_bubble_rounded,
+        title: 'Saran & Kesan TPM',
+        subtitle: 'Tulis kesan dan saran untuk mata kuliah TPM.',
+        color: _cyan,
+        onTap: () => Navigator.pushNamed(context, '/feedback'),
+      ),
+      const SizedBox(height: 14),
+      _menuTile(
+        icon: Icons.logout_rounded,
+        title: 'Logout',
+        subtitle: 'Keluar dari akun di perangkat ini.',
+        color: _pink,
+        onTap: _showLogoutDialog,
+      ),
+    ],
+  );
+}
 
   @override
   Widget build(BuildContext context) {
