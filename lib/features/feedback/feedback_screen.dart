@@ -157,7 +157,6 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   Widget _inputCard({
     required String title,
     required String hint,
-    required IconData icon,
     required TextEditingController controller,
   }) {
     return Container(
@@ -170,19 +169,13 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(icon, color: _cyan),
-              const SizedBox(width: 10),
-              Text(
-                title,
-                style: const TextStyle(
-                  color: _text,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ],
+          Text(
+            title,
+            style: const TextStyle(
+              color: _text,
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+            ),
           ),
           const SizedBox(height: 14),
           TextField(
@@ -235,8 +228,6 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.rate_review_rounded, color: _cyan, size: 20),
-              const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   _formatDate(item['created_at']?.toString()),
@@ -247,17 +238,25 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                   ),
                 ),
               ),
-              IconButton(
+              TextButton(
                 onPressed: () => _editFeedback(item),
-                icon: const Icon(Icons.edit_rounded),
-                color: _purple,
-                tooltip: 'Edit',
+                child: const Text(
+                  'Edit',
+                  style: TextStyle(
+                    color: _purple,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
               ),
-              IconButton(
+              TextButton(
                 onPressed: () => _deleteFeedback(item),
-                icon: const Icon(Icons.delete_outline_rounded),
-                color: _pink,
-                tooltip: 'Hapus',
+                child: const Text(
+                  'Hapus',
+                  style: TextStyle(
+                    color: _pink,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
               ),
             ],
           ),
@@ -323,7 +322,14 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
-        title: const Text('Saran & Kesan TPM'),
+        title: const Text(
+          'Saran & Kesan TPM',
+          style: TextStyle(
+            color: _text,
+            fontSize: 24,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
         centerTitle: true,
         backgroundColor: _bg,
         foregroundColor: _text,
@@ -335,62 +341,55 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 10, 20, 30),
             children: [
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [_purple, Color(0xFF2563EB), _pink],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+              if (editingCreatedAt != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: _surface,
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(color: _border),
                   ),
-                  borderRadius: BorderRadius.circular(26),
-                ),
-                child: Text(
-                  editingCreatedAt == null
-                      ? 'Tulis kesan dan saran untuk mata kuliah TPM.'
-                      : 'Kamu sedang mengedit masukan yang sudah tersimpan.',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    height: 1.4,
-                    fontWeight: FontWeight.w800,
+                  child: const Text(
+                    'Mode edit masukan aktif.',
+                    style: TextStyle(
+                      color: _cyan,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 18),
+                const SizedBox(height: 18),
+              ],
               _inputCard(
                 title: 'Kesan',
                 hint: 'Contoh: Materi TPM membantu memahami aplikasi mobile.',
-                icon: Icons.favorite_rounded,
                 controller: impressionController,
               ),
               const SizedBox(height: 16),
               _inputCard(
                 title: 'Saran',
                 hint: 'Contoh: Tambahkan contoh implementasi API dan database.',
-                icon: Icons.lightbulb_rounded,
                 controller: suggestionController,
               ),
               const SizedBox(height: 18),
               SizedBox(
                 height: 54,
-                child: ElevatedButton.icon(
+                child: ElevatedButton(
                   onPressed: isSubmitting ? null : _submitFeedback,
-                  icon: Icon(
-                    editingCreatedAt == null
-                        ? Icons.save_rounded
-                        : Icons.check_rounded,
-                  ),
-                  label: Text(
-                    editingCreatedAt == null
-                        ? 'Simpan Masukan'
-                        : 'Simpan Perubahan',
-                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _purple,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(18),
+                    ),
+                  ),
+                  child: Text(
+                    editingCreatedAt == null
+                        ? 'Simpan Masukan'
+                        : 'Simpan Perubahan',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
                 ),
