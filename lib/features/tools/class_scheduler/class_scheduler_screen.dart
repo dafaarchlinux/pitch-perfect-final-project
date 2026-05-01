@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
-import '../../../services/notification_service.dart';
+
 import '../../../services/practice_progress_service.dart';
 
+const Color _bg = Color(0xFF0B0D22);
 const Color _surface = Color(0xFF17182C);
 const Color _surfaceSoft = Color(0xFF232542);
+const Color _border = Color(0xFF2D3050);
 const Color _text = Color(0xFFF8FAFC);
+const Color _muted = Color(0xFF9EA6C9);
 const Color _purple = Color(0xFF8B5CF6);
 const Color _cyan = Color(0xFF22D3EE);
+const Color _pink = Color(0xFFF472B6);
+const Color _green = Color(0xFF34D399);
 
 class ClassSchedulerScreen extends StatefulWidget {
   const ClassSchedulerScreen({super.key});
@@ -17,20 +22,15 @@ class ClassSchedulerScreen extends StatefulWidget {
 
 class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
   String selectedPractice = 'Gitar';
-  String selectedTarget = 'Tuning Gitar';
+  String selectedTarget = 'Teknik Chord';
   String selectedZone = 'WIB';
   DateTime selectedDate = DateTime.now();
   TimeOfDay selectedTime = TimeOfDay.now();
-
-  DateTime manualConvertDate = DateTime.now();
-  TimeOfDay manualConvertTime = TimeOfDay.now();
-  String manualFromZone = 'WIB';
-  String manualToZone = 'WITA';
-
   bool isSaving = false;
 
+  String? editingScheduleId;
+
   final List<Map<String, dynamic>> savedSchedules = [];
-  final Map<int, String> scheduleDisplayZones = {};
 
   final Map<String, int> zoneOffsets = {
     'London': 0,
@@ -51,23 +51,21 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
         'Artikulasi',
         'Vibrato Dasar',
       ],
-      'focus':
-          'Kontrol napas, stabilitas nada, artikulasi, dan ekspresi suara.',
+      'focus': 'Kontrol napas, stabilitas nada, artikulasi, dan ekspresi suara.',
     },
     'Gitar': {
       'icon': Icons.music_note_rounded,
-      'color': Color(0xFFFBBF24),
+      'color': Color(0xFFF472B6),
       'targets': [
         'Tuning Gitar',
-        'Chord Dasar',
+        'Teknik Chord',
         'Strumming',
         'Fingerstyle',
         'Picking',
         'Rhythm',
         'Perpindahan Chord',
       ],
-      'focus':
-          'Tuning, chord, petikan, strumming, tempo, dan koordinasi tangan.',
+      'focus': 'Tuning, chord, petikan, strumming, tempo, dan koordinasi tangan.',
     },
     'Piano': {
       'icon': Icons.piano_rounded,
@@ -97,7 +95,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
     },
     'Ear Training': {
       'icon': Icons.hearing_rounded,
-      'color': Color(0xFFF472B6),
+      'color': Color(0xFFFBBF24),
       'targets': [
         'Do Re Mi',
         'Tebak Nada',
@@ -119,8 +117,7 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
         'Layering Suara',
         'Kebersihan Audio',
       ],
-      'focus':
-          'Kualitas rekaman, jarak mikrofon, monitoring, dan evaluasi audio.',
+      'focus': 'Kualitas rekaman, jarak mikrofon, monitoring, dan evaluasi audio.',
     },
   };
 
@@ -154,8 +151,6 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
     selectedDate = DateTime(now.year, now.month, now.day);
     final next = now.add(const Duration(minutes: 3));
     selectedTime = TimeOfDay(hour: next.hour, minute: next.minute);
-    manualConvertDate = DateTime(now.year, now.month, now.day);
-    manualConvertTime = TimeOfDay(hour: next.hour, minute: next.minute);
   }
 
   Future<void> _loadSavedSchedules() async {
@@ -167,16 +162,6 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
       savedSchedules
         ..clear()
         ..addAll(schedules);
-
-      scheduleDisplayZones
-        ..clear()
-        ..addEntries(
-          schedules.where((item) => item['id'] is int).map((item) {
-            final id = item['id'] as int;
-            final zone = item['zone']?.toString() ?? 'WIB';
-            return MapEntry(id, zone);
-          }),
-        );
     });
   }
 
@@ -192,39 +177,13 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
     return _formatTimeFromParts(time.hour, time.minute);
   }
 
-  String _dayName(DateTime date) {
-    const names = [
-      'Senin',
-      'Selasa',
-      'Rabu',
-      'Kamis',
-      'Jumat',
-      'Sabtu',
-      'Minggu',
-    ];
-    return names[date.weekday - 1];
+  String _formatCompactDate(DateTime date) {
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '${date.year}-$month-$day';
   }
 
-  String _formatDate(DateTime date) {
-    const months = [
-      'Januari',
-      'Februari',
-      'Maret',
-      'April',
-      'Mei',
-      'Juni',
-      'Juli',
-      'Agustus',
-      'September',
-      'Oktober',
-      'November',
-      'Desember',
-    ];
-
-    return '${_dayName(date)}, ${date.day} ${months[date.month - 1]} ${date.year}';
-  }
-
-  DateTime _originalDateTime() {
+  DateTime _selectedDateTime() {
     return DateTime(
       selectedDate.year,
       selectedDate.month,
@@ -234,66 +193,69 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
     );
   }
 
-  DateTime _convertDateTime({
-    required DateTime originalDateTime,
-    required String fromZone,
-    required String toZone,
-  }) {
-    final fromOffset = zoneOffsets[fromZone] ?? 7;
-    final toOffset = zoneOffsets[toZone] ?? 7;
-    return originalDateTime.add(Duration(hours: toOffset - fromOffset));
+  DateTime _toUtcBasedOnZone(DateTime localInput, String zone) {
+    final offset = zoneOffsets[zone] ?? 7;
+    return localInput.subtract(Duration(hours: offset));
   }
 
-  DateTime _toDeviceDateTime({
-    required DateTime originalDateTime,
-    required String fromZone,
-  }) {
-    final fromOffset = zoneOffsets[fromZone] ?? 7;
-    return originalDateTime.add(Duration(hours: _deviceOffset - fromOffset));
+  DateTime _fromUtcToZone(DateTime utc, String zone) {
+    final offset = zoneOffsets[zone] ?? 7;
+    return utc.add(Duration(hours: offset));
   }
 
-  String _convertedText({
-    required DateTime originalDateTime,
-    required String fromZone,
-    required String toZone,
-  }) {
-    final converted = _convertDateTime(
-      originalDateTime: originalDateTime,
-      fromZone: fromZone,
-      toZone: toZone,
+  Map<String, String> _convertedTimesForSelection() {
+    final input = _selectedDateTime();
+    final utc = _toUtcBasedOnZone(input, selectedZone);
+
+    final result = <String, String>{};
+    for (final zone in ['WIB', 'WITA', 'WIT', 'London']) {
+      final converted = _fromUtcToZone(utc, zone);
+      result[zone] = '${_formatTimeFromParts(converted.hour, converted.minute)} • ${_formatCompactDate(converted)}';
+    }
+    return result;
+  }
+
+  Map<String, String> _convertedTimesFromSchedule(Map<String, dynamic> schedule) {
+    final rawDate = schedule['date']?.toString() ?? _formatCompactDate(DateTime.now());
+    final rawTime = schedule['time']?.toString() ?? '00:00';
+    final rawZone = schedule['timezone']?.toString() ?? 'WIB';
+
+    final dateParts = rawDate.split('-');
+    final timeParts = rawTime.split(':');
+
+    final date = DateTime(
+      int.tryParse(dateParts.elementAt(0)) ?? DateTime.now().year,
+      int.tryParse(dateParts.elementAt(1)) ?? DateTime.now().month,
+      int.tryParse(dateParts.elementAt(2)) ?? DateTime.now().day,
+      int.tryParse(timeParts.elementAt(0)) ?? 0,
+      int.tryParse(timeParts.elementAt(1)) ?? 0,
     );
 
-    return '${_formatDate(converted)} • ${_formatTimeFromParts(converted.hour, converted.minute)} $toZone';
+    final utc = _toUtcBasedOnZone(date, rawZone);
+    final result = <String, String>{};
+
+    for (final zone in ['WIB', 'WITA', 'WIT', 'London']) {
+      final converted = _fromUtcToZone(utc, zone);
+      result[zone] = '${_formatTimeFromParts(converted.hour, converted.minute)} • ${_formatCompactDate(converted)}';
+    }
+
+    return result;
   }
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
-
     final picked = await showDatePicker(
       context: context,
-      initialDate: selectedDate.isBefore(DateTime(now.year, now.month, now.day))
-          ? DateTime(now.year, now.month, now.day)
-          : selectedDate,
+      initialDate: selectedDate.isBefore(now) ? now : selectedDate,
       firstDate: DateTime(now.year, now.month, now.day),
-      lastDate: DateTime(now.year + 3, 12, 31),
+      lastDate: now.add(const Duration(days: 365)),
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.dark(
               primary: _purple,
-              onPrimary: Colors.white,
               surface: _surface,
               onSurface: _text,
-            ),
-            dialogTheme: const DialogThemeData(backgroundColor: _surface),
-            datePickerTheme: const DatePickerThemeData(
-              backgroundColor: _surface,
-              headerBackgroundColor: _purple,
-              headerForegroundColor: Colors.white,
-              dayForegroundColor: WidgetStatePropertyAll(_text),
-              yearForegroundColor: WidgetStatePropertyAll(_text),
-              todayForegroundColor: WidgetStatePropertyAll(_cyan),
-              todayBorder: BorderSide(color: _cyan),
             ),
           ),
           child: child!,
@@ -301,11 +263,9 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
       },
     );
 
-    if (picked == null) return;
-
-    setState(() {
-      selectedDate = DateTime(picked.year, picked.month, picked.day);
-    });
+    if (picked != null) {
+      setState(() => selectedDate = DateTime(picked.year, picked.month, picked.day));
+    }
   }
 
   Future<void> _pickTime() async {
@@ -317,21 +277,8 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.dark(
               primary: _purple,
-              onPrimary: Colors.white,
               surface: _surface,
               onSurface: _text,
-            ),
-            dialogTheme: const DialogThemeData(backgroundColor: _surface),
-            timePickerTheme: const TimePickerThemeData(
-              backgroundColor: _surface,
-              hourMinuteColor: _surfaceSoft,
-              hourMinuteTextColor: _text,
-              dialBackgroundColor: _surfaceSoft,
-              dialHandColor: _purple,
-              dialTextColor: _text,
-              entryModeIconColor: _cyan,
-              dayPeriodColor: _surfaceSoft,
-              dayPeriodTextColor: _text,
             ),
           ),
           child: child!,
@@ -339,35 +286,33 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
       },
     );
 
-    if (picked == null) return;
-
-    setState(() {
-      selectedTime = picked;
-    });
+    if (picked != null) setState(() => selectedTime = picked);
   }
 
-  void _selectPractice(String value) {
-    final targets = practiceCatalog[value]!['targets'] as List;
-
-    setState(() {
-      selectedPractice = value;
-      selectedTarget = targets.first.toString();
-    });
+  Map<String, dynamic> _buildScheduleData({String? id}) {
+    final plan = _practicePlan;
+    return {
+      'id': id ?? DateTime.now().microsecondsSinceEpoch.toString(),
+      'practice': selectedPractice,
+      'target': selectedTarget,
+      'date': _formatCompactDate(selectedDate),
+      'time': _formatTime(selectedTime),
+      'timezone': selectedZone,
+      'device_timezone': _deviceZoneLabel,
+      'converted_times': _convertedTimesForSelection(),
+      'focus': plan['focus'].toString(),
+      'created_at': DateTime.now().toIso8601String(),
+      'storage': 'Hive',
+    };
   }
 
   Future<void> _saveSchedule() async {
-    if (isSaving) return;
+    final scheduledDateTime = _selectedDateTime();
 
-    final original = _originalDateTime();
-    final deviceSchedule = _toDeviceDateTime(
-      originalDateTime: original,
-      fromZone: selectedZone,
-    );
-
-    if (deviceSchedule.isBefore(DateTime.now())) {
+    if (scheduledDateTime.isBefore(DateTime.now())) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Pilih tanggal dan jam yang belum lewat.'),
+          content: Text('Pilih jadwal yang belum lewat.'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -376,460 +321,325 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
 
     setState(() => isSaving = true);
 
-    final notificationId = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    final plan = _practicePlan;
-    final deviceReminderText =
-        '${_formatDate(deviceSchedule)} • ${_formatTimeFromParts(deviceSchedule.hour, deviceSchedule.minute)} $_deviceZoneLabel';
+    try {
+      final scheduleData = _buildScheduleData(id: editingScheduleId);
 
-    final savedSchedule = {
-      'id': notificationId,
-      'practice_type': selectedPractice,
-      'target': selectedTarget,
-      'year': selectedDate.year,
-      'month': selectedDate.month,
-      'date': selectedDate.day,
-      'hour': selectedTime.hour,
-      'minute': selectedTime.minute,
-      'zone': selectedZone,
-      'focus': plan['focus'],
-      'device_zone': _deviceZoneLabel,
-      'device_reminder_time': deviceReminderText,
-      'created_at': DateTime.now().toIso8601String(),
-      'notification_enabled': true,
-    };
+      if (editingScheduleId == null) {
+        savedSchedules.insert(0, scheduleData);
+      } else {
+        final index = savedSchedules.indexWhere((item) => item['id'] == editingScheduleId);
+        if (index == -1) {
+          savedSchedules.insert(0, scheduleData);
+        } else {
+          savedSchedules[index] = scheduleData;
+        }
+      }
 
-    setState(() {
-      savedSchedules.insert(0, savedSchedule);
-      scheduleDisplayZones[notificationId] = selectedZone;
-    });
+      await _persistSavedSchedules();
 
-    await _persistSavedSchedules();
+      await PracticeProgressService.addPracticeSession(
+        title: editingScheduleId == null
+            ? 'Jadwal latihan: $selectedPractice'
+            : 'Edit jadwal latihan: $selectedPractice',
+        type: 'Smart Practice Scheduler',
+        passed: true,
+        metadata: scheduleData,
+      );
 
-    await PracticeProgressService.addPracticeSession(
-      title: 'Jadwal latihan $selectedPractice',
-      type: 'Smart Practice Scheduler',
-      score: null,
-      level: null,
-      combo: null,
-      passed: true,
-      metadata: {
-        ...savedSchedule,
-        'original_time':
-            '${_formatDate(selectedDate)} • ${_formatTime(selectedTime)} $selectedZone',
-        'london_time': _convertedText(
-          originalDateTime: original,
-          fromZone: selectedZone,
-          toZone: 'London',
+      if (!mounted) return;
+      setState(() {
+        isSaving = false;
+        editingScheduleId = null;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            editingScheduleId == null
+                ? 'Jadwal latihan berhasil disimpan.'
+                : 'Jadwal latihan berhasil diperbarui.',
+          ),
+          behavior: SnackBarBehavior.floating,
         ),
-      },
-    );
-
-    await NotificationService.schedulePracticeReminder(
-      id: notificationId,
-      title: 'Waktunya latihan $selectedPractice',
-      body: '$selectedTarget • Reminder HP: $deviceReminderText',
-      scheduledAt: deviceSchedule,
-    );
-
-    if (!mounted) return;
-
-    setState(() => isSaving = false);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Jadwal tersimpan: ${_formatDate(selectedDate)} • ${_formatTime(selectedTime)} $selectedZone. Reminder HP: $deviceReminderText.',
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Gagal menyimpan jadwal.'),
+          behavior: SnackBarBehavior.floating,
         ),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+      );
+    }
   }
 
-  Future<void> _removeSchedule(Map<String, dynamic> schedule) async {
-    final id = schedule['id'];
-    if (id is int) {
-      await NotificationService.cancelNotification(id);
-    }
+  Future<void> _deleteSchedule(String id) async {
+    setState(() {
+      savedSchedules.removeWhere((item) => item['id'] == id);
+      if (editingScheduleId == id) editingScheduleId = null;
+    });
+    await _persistSavedSchedules();
+  }
+
+  void _startEditSchedule(
+    Map<String, dynamic> schedule, {
+    bool closeDialog = false,
+  }) {
+    final practice = schedule['practice']?.toString() ?? 'Gitar';
+    final target = schedule['target']?.toString() ?? 'Teknik Chord';
+    final rawDate = schedule['date']?.toString() ?? _formatCompactDate(DateTime.now());
+    final rawTime = schedule['time']?.toString() ?? _formatTime(TimeOfDay.now());
+    final timezone = schedule['timezone']?.toString() ?? 'WIB';
+
+    final dateParts = rawDate.split('-');
+    final timeParts = rawTime.split(':');
+
+    final parsedDate = DateTime(
+      int.tryParse(dateParts.elementAt(0)) ?? DateTime.now().year,
+      int.tryParse(dateParts.elementAt(1)) ?? DateTime.now().month,
+      int.tryParse(dateParts.elementAt(2)) ?? DateTime.now().day,
+    );
+
+    final parsedTime = TimeOfDay(
+      hour: int.tryParse(timeParts.elementAt(0)) ?? TimeOfDay.now().hour,
+      minute: int.tryParse(timeParts.elementAt(1)) ?? TimeOfDay.now().minute,
+    );
+
+    final validPractice = practiceCatalog.containsKey(practice) ? practice : 'Gitar';
+    final targets = (practiceCatalog[validPractice]!['targets'] as List)
+        .map((item) => item.toString())
+        .toList();
 
     setState(() {
-      savedSchedules.removeWhere((item) => item['id'] == schedule['id']);
-      if (id is int) scheduleDisplayZones.remove(id);
+      editingScheduleId = schedule['id']?.toString();
+      selectedPractice = validPractice;
+      selectedTarget = targets.contains(target) ? target : targets.first;
+      selectedDate = parsedDate;
+      selectedTime = parsedTime;
+      selectedZone = zoneOffsets.containsKey(timezone) ? timezone : 'WIB';
     });
 
-    await _persistSavedSchedules();
-
-    if (!mounted) return;
+    if (closeDialog) {
+      Navigator.pop(context);
+    }
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Jadwal dihapus dan reminder dibatalkan.'),
+        content: Text('Mode edit aktif. Ubah data lalu tekan Simpan.'),
         behavior: SnackBarBehavior.floating,
       ),
     );
   }
 
-  Widget _buildChoiceChips({
-    required List<String> values,
-    required String selectedValue,
-    required ValueChanged<String> onSelected,
-  }) {
-    return Wrap(
-      spacing: 9,
-      runSpacing: 9,
-      children: values.map((value) {
-        final selected = selectedValue == value;
+  void _cancelEdit() {
+    setState(() {
+      editingScheduleId = null;
+      _normalizeInitialTime();
+      selectedPractice = 'Gitar';
+      selectedTarget = 'Teknik Chord';
+      selectedZone = 'WIB';
+    });
+  }
 
-        return ChoiceChip(
-          label: Text(value),
-          selected: selected,
-          onSelected: (_) => onSelected(value),
-          selectedColor: const Color(0xFF8B5CF6),
-          backgroundColor: const Color(0xFF232542),
-          labelStyle: TextStyle(
-            color: selected ? Colors.white : const Color(0xFFDDE2FF),
+  Widget _sectionLabel(String label) {
+    return Text(
+      label,
+      style: const TextStyle(
+        color: _muted,
+        fontSize: 12,
+        fontWeight: FontWeight.w900,
+        letterSpacing: 0.4,
+      ),
+    );
+  }
+
+  Widget _inputShell({required Widget child, VoidCallback? onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: _surfaceSoft,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _border),
+        ),
+        alignment: Alignment.centerLeft,
+        child: child,
+      ),
+    );
+  }
+
+  Widget _dropdownField({
+    required String value,
+    required List<String> items,
+    required ValueChanged<String?> onChanged,
+  }) {
+    return _inputShell(
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          isExpanded: true,
+          dropdownColor: _surfaceSoft,
+          iconEnabledColor: _muted,
+          borderRadius: BorderRadius.circular(14),
+          style: const TextStyle(
+            color: _text,
+            fontSize: 13,
             fontWeight: FontWeight.w800,
           ),
-          side: BorderSide(
-            color: selected ? const Color(0xFF8B5CF6) : const Color(0xFF2D3050),
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _buildSectionTitle(String title, String subtitle) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              color: Color(0xFFF8FAFC),
-              fontSize: 17,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: const TextStyle(
-              color: Color(0xFFB8BCD7),
-              fontSize: 13,
-              height: 1.4,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
+          items: items
+              .map((item) => DropdownMenuItem(value: item, child: Text(item)))
+              .toList(),
+          onChanged: onChanged,
+        ),
       ),
     );
   }
 
-  Widget _buildInfoChip(IconData icon, String text) {
+  Widget _buildSchedulerForm() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: _surfaceSoft,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFF2D3050)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 15, color: const Color(0xFF8B5CF6)),
-          const SizedBox(width: 5),
-          Text(
-            text,
-            style: const TextStyle(
-              color: Color(0xFFDDE2FF),
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDeviceTimeCard() {
-    final now = DateTime.now();
-    final nowText =
-        '${_formatDate(now)} • ${_formatTimeFromParts(now.hour, now.minute)} $_deviceZoneLabel';
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF12251F),
+        color: _surface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFF245C46)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(
-            Icons.phone_android_rounded,
-            color: Color(0xFF34D399),
-            size: 28,
-          ),
-          const SizedBox(width: 13),
-          Expanded(
-            child: Text(
-              'Jam perangkat HP kamu: $nowText. Reminder otomatis mengikuti jam perangkat ini.',
-              style: const TextStyle(
-                color: Color(0xFFC4F1E2),
-                fontSize: 13,
-                height: 1.45,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _pickManualConvertDate() async {
-    final now = DateTime.now();
-
-    final picked = await showDatePicker(
-      context: context,
-      initialDate:
-          manualConvertDate.isBefore(DateTime(now.year, now.month, now.day))
-          ? DateTime(now.year, now.month, now.day)
-          : manualConvertDate,
-      firstDate: DateTime(now.year, now.month, now.day),
-      lastDate: DateTime(now.year + 3, 12, 31),
-    );
-
-    if (picked == null) return;
-
-    setState(() {
-      manualConvertDate = DateTime(picked.year, picked.month, picked.day);
-    });
-  }
-
-  Future<void> _pickManualConvertTime() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: manualConvertTime,
-    );
-
-    if (picked == null) return;
-
-    setState(() {
-      manualConvertTime = picked;
-    });
-  }
-
-  Widget _buildZoneDropdown({
-    required String value,
-    required ValueChanged<String> onChanged,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 13),
-      decoration: BoxDecoration(
-        color: _surfaceSoft,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFF2D3050)),
-      ),
-      child: DropdownButton<String>(
-        value: value,
-        isExpanded: true,
-        underline: const SizedBox(),
-        borderRadius: BorderRadius.circular(16),
-        items: zoneOffsets.keys
-            .map((zone) => DropdownMenuItem(value: zone, child: Text(zone)))
-            .toList(),
-        onChanged: (newValue) {
-          if (newValue != null) onChanged(newValue);
-        },
-      ),
-    );
-  }
-
-  Widget _buildManualTimeConverterCard() {
-    final original = DateTime(
-      manualConvertDate.year,
-      manualConvertDate.month,
-      manualConvertDate.day,
-      manualConvertTime.hour,
-      manualConvertTime.minute,
-    );
-
-    final converted = _convertedText(
-      originalDateTime: original,
-      fromZone: manualFromZone,
-      toZone: manualToZone,
-    );
-
-    final originalText =
-        '${_formatDate(manualConvertDate)} • ${_formatTime(manualConvertTime)} $manualFromZone';
-
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFF17182C),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: const Color(0xFF2D3050)),
+        border: Border.all(color: _border),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Konversi Manual Jadwal',
-            style: TextStyle(
-              color: Color(0xFFF8FAFC),
-              fontSize: 19,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 7),
-          const Text(
-            'Gunakan ini sebagai patokan sebelum menyimpan jadwal. Pilih waktu asal, lalu lihat hasilnya di zona tujuan.',
-            style: TextStyle(
-              color: Color(0xFFB8BCD7),
-              fontSize: 13,
-              height: 1.45,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 14),
-          OutlinedButton.icon(
-            onPressed: _pickManualConvertDate,
-            icon: const Icon(Icons.calendar_month_rounded),
-            label: Text(_formatDate(manualConvertDate)),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF8B5CF6),
-              side: const BorderSide(color: Color(0xFF2D3050)),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              minimumSize: const Size(double.infinity, 48),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
+          if (editingScheduleId != null) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(13),
+              decoration: BoxDecoration(
+                color: _purple.withOpacity(0.14),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: _purple.withOpacity(0.5)),
+              ),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Mode edit jadwal aktif',
+                      style: TextStyle(
+                        color: _text,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _cancelEdit,
+                    child: const Text(
+                      'Batal',
+                      style: TextStyle(color: _pink, fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-          const SizedBox(height: 10),
-          OutlinedButton.icon(
-            onPressed: _pickManualConvertTime,
-            icon: const Icon(Icons.schedule_rounded),
-            label: Text('Jam asal: ${_formatTime(manualConvertTime)}'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF8B5CF6),
-              side: const BorderSide(color: Color(0xFF2D3050)),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              minimumSize: const Size(double.infinity, 48),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
+            const SizedBox(height: 20),
+          ],
           Row(
             children: [
-              Expanded(
-                child: _buildZoneDropdown(
-                  value: manualFromZone,
-                  onChanged: (value) => setState(() => manualFromZone = value),
-                ),
-              ),
-              const SizedBox(width: 10),
-              const Icon(Icons.arrow_forward_rounded, color: Color(0xFF8B5CF6)),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildZoneDropdown(
-                  value: manualToZone,
-                  onChanged: (value) => setState(() => manualToZone = value),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(15),
-            decoration: BoxDecoration(
-              color: _surfaceSoft,
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Waktu asal: $originalText',
-                  style: const TextStyle(
-                    color: Color(0xFFB8BCD7),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Hasil konversi: $converted',
-                  style: const TextStyle(
-                    color: Color(0xFF34D399),
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSummaryCard() {
-    final plan = _practicePlan;
-    final color = plan['color'] as Color;
-    final original = _originalDateTime();
-    final deviceSchedule = _toDeviceDateTime(
-      originalDateTime: original,
-      fromZone: selectedZone,
-    );
-
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFF17182C),
-        borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: const Color(0xFF2D3050)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 54,
-                height: 54,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Icon(plan['icon'] as IconData, color: color, size: 28),
-              ),
-              const SizedBox(width: 13),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Rencana $selectedPractice',
-                      style: const TextStyle(
-                        color: Color(0xFFF8FAFC),
-                        fontSize: 19,
-                        fontWeight: FontWeight.w900,
+                    _sectionLabel('JENIS LATIHAN'),
+                    const SizedBox(height: 9),
+                    _dropdownField(
+                      value: selectedPractice,
+                      items: practiceCatalog.keys.toList(),
+                      onChanged: (value) {
+                        if (value == null) return;
+                        final targets = (practiceCatalog[value]!['targets'] as List)
+                            .map((item) => item.toString())
+                            .toList();
+                        setState(() {
+                          selectedPractice = value;
+                          selectedTarget = targets.first;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _sectionLabel('TARGET'),
+                    const SizedBox(height: 9),
+                    _dropdownField(
+                      value: _currentTargets.contains(selectedTarget)
+                          ? selectedTarget
+                          : _currentTargets.first,
+                      items: _currentTargets,
+                      onChanged: (value) {
+                        if (value != null) setState(() => selectedTarget = value);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _sectionLabel('TANGGAL'),
+                    const SizedBox(height: 9),
+                    _inputShell(
+                      onTap: _pickDate,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _formatCompactDate(selectedDate),
+                              style: const TextStyle(
+                                color: _text,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          const Icon(Icons.calendar_month_rounded, color: _muted, size: 18),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 5),
-                    Text(
-                      '${_formatDate(selectedDate)} • ${_formatTime(selectedTime)} $selectedZone',
-                      style: const TextStyle(
-                        color: Color(0xFFB8BCD7),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _sectionLabel('JAM'),
+                    const SizedBox(height: 9),
+                    _inputShell(
+                      onTap: _pickTime,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _formatTime(selectedTime),
+                              style: const TextStyle(
+                                color: _text,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          const Icon(Icons.schedule_rounded, color: _muted, size: 18),
+                        ],
                       ),
                     ),
                   ],
@@ -837,52 +647,158 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 15),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _buildInfoChip(Icons.flag_rounded, selectedTarget),
-              _buildInfoChip(
-                Icons.notifications_active_rounded,
-                'Reminder aktif',
+          const SizedBox(height: 24),
+          _buildSelectedDataAndTimezone(),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: isSaving ? null : _saveSchedule,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _purple,
+                padding: const EdgeInsets.symmetric(vertical: 17),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
-              _buildInfoChip(
-                Icons.phone_android_rounded,
-                '${_formatDate(deviceSchedule)} • ${_formatTimeFromParts(deviceSchedule.hour, deviceSchedule.minute)} $_deviceZoneLabel',
+              child: Text(
+                isSaving
+                    ? 'Menyimpan...'
+                    : editingScheduleId == null
+                        ? 'Simpan Jadwal & Reminder'
+                        : 'Simpan Perubahan Jadwal',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 15,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSelectedDataAndTimezone() {
+    final plan = _practicePlan;
+    final icon = plan['icon'] as IconData;
+    final color = plan['color'] as Color;
+    final converted = _convertedTimesForSelection();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _surfaceSoft,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, color: color, size: 26),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      selectedPractice,
+                      style: const TextStyle(
+                        color: _text,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Target: $selectedTarget',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: _pink,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          Text(
-            'Fokus: ${plan['focus']}',
-            style: const TextStyle(
-              color: Color(0xFFDDE2FF),
-              fontSize: 13,
-              height: 1.45,
-              fontWeight: FontWeight.w700,
-            ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _smallInfoBox(
+                  icon: Icons.calendar_today_rounded,
+                  label: 'TANGGAL',
+                  value: _formatCompactDate(selectedDate),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _smallInfoBox(
+                  icon: Icons.access_time_rounded,
+                  label: 'JAM',
+                  value: '${_formatTime(selectedTime)} $selectedZone',
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 14),
-          const Text(
-            'Konversi waktu jadwal ini',
-            style: TextStyle(
-              color: Color(0xFFF8FAFC),
-              fontSize: 14,
-              fontWeight: FontWeight.w900,
-            ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Lihat konversi zona waktu',
+                  style: TextStyle(
+                    color: _muted,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 110,
+                child: _dropdownField(
+                  value: selectedZone,
+                  items: zoneOffsets.keys.toList(),
+                  onChanged: (value) {
+                    if (value != null) setState(() => selectedZone = value);
+                  },
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 9),
+          const SizedBox(height: 12),
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: zoneOffsets.keys.map((zone) {
-              return _buildInfoChip(
-                Icons.public_rounded,
-                _convertedText(
-                  originalDateTime: original,
-                  fromZone: selectedZone,
-                  toZone: zone,
+            children: converted.entries.map((entry) {
+              final isSelected = entry.key == selectedZone;
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                decoration: BoxDecoration(
+                  color: isSelected ? _purple.withOpacity(0.22) : _bg.withOpacity(0.55),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: isSelected ? _purple : _border),
+                ),
+                child: Text(
+                  '${entry.key}: ${entry.value}',
+                  style: TextStyle(
+                    color: isSelected ? _text : _muted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               );
             }).toList(),
@@ -892,350 +808,494 @@ class _ClassSchedulerScreenState extends State<ClassSchedulerScreen> {
     );
   }
 
-  Widget _buildSavedSchedulesSection() {
+  Widget _smallInfoBox({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF17182C), Color(0xFF251640)],
-        ),
-        borderRadius: BorderRadius.circular(28),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Jadwalku',
-            style: TextStyle(
-              color: Color(0xFFF8FAFC),
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 7),
-          const Text(
-            'Setiap jadwal menyimpan tanggal dan zona asli. Kamu bisa mengubah tampilan konversi per jadwal tanpa mengubah reminder.',
-            style: TextStyle(
-              color: Color(0xFFB8BCD7),
-              fontSize: 13,
-              height: 1.45,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 14),
-          if (savedSchedules.isEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                color: const Color(0xFF232542).withValues(alpha: 0.92),
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: const Text(
-                'Belum ada jadwal tersimpan. Buat jadwal latihan pertama, lalu reminder otomatis akan aktif.',
-                style: TextStyle(
-                  color: Color(0xFFB8BCD7),
-                  fontSize: 13,
-                  height: 1.4,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            )
-          else
-            ...savedSchedules.map(_buildSavedScheduleCard),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSavedScheduleCard(Map<String, dynamic> schedule) {
-    final id = schedule['id'] is int
-        ? schedule['id'] as int
-        : schedule.hashCode;
-    final practice = schedule['practice_type']?.toString() ?? 'Latihan';
-    final target = schedule['target']?.toString() ?? 'Target';
-    final zone = schedule['zone']?.toString() ?? 'WIB';
-    final year = schedule['year'] is int
-        ? schedule['year'] as int
-        : DateTime.now().year;
-    final month = schedule['month'] is int
-        ? schedule['month'] as int
-        : DateTime.now().month;
-    final date = schedule['date'] is int
-        ? schedule['date'] as int
-        : DateTime.now().day;
-    final hour = schedule['hour'] is int ? schedule['hour'] as int : 0;
-    final minute = schedule['minute'] is int ? schedule['minute'] as int : 0;
-    final focus = schedule['focus']?.toString() ?? '';
-    final reminder = schedule['device_reminder_time']?.toString() ?? '-';
-
-    final original = DateTime(year, month, date, hour, minute);
-    final displayZone = scheduleDisplayZones[id] ?? zone;
-    final converted = _convertedText(
-      originalDateTime: original,
-      fromZone: zone,
-      toZone: displayZone,
-    );
-
-    final plan = practiceCatalog[practice];
-    final color = plan == null
-        ? const Color(0xFF8B5CF6)
-        : plan['color'] as Color;
-    final icon = plan == null
-        ? Icons.event_note_rounded
-        : plan['icon'] as IconData;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: const Color(0xFF232542).withValues(alpha: 0.94),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: const Color(0xFF2D3050).withValues(alpha: 0.90),
-        ),
+        color: _surface,
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: _border),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.13),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Icon(icon, color: color, size: 24),
-          ),
-          const SizedBox(width: 12),
+          Icon(icon, color: _cyan, size: 18),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '$practice • $target',
+                  label,
                   style: const TextStyle(
-                    color: Color(0xFFF8FAFC),
-                    fontSize: 15,
+                    color: _muted,
+                    fontSize: 10,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
-                const SizedBox(height: 5),
+                const SizedBox(height: 4),
                 Text(
-                  converted,
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    color: Color(0xFF34D399),
+                    color: _text,
                     fontSize: 13,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'Jadwal asli: ${_formatDate(original)} • ${_formatTimeFromParts(hour, minute)} $zone',
-                  style: const TextStyle(
-                    color: Color(0xFFB8BCD7),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Reminder HP: $reminder',
-                  style: const TextStyle(
-                    color: Color(0xFF8B5CF6),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 9),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF17182C),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFF2D3050)),
-                  ),
-                  child: DropdownButton<String>(
-                    value: displayZone,
-                    isExpanded: true,
-                    underline: const SizedBox(),
-                    borderRadius: BorderRadius.circular(16),
-                    items: zoneOffsets.keys
-                        .map(
-                          (itemZone) => DropdownMenuItem(
-                            value: itemZone,
-                            child: Text('Konversi jadwal ini ke $itemZone'),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setState(() => scheduleDisplayZones[id] = value);
-                    },
-                  ),
-                ),
-                if (focus.isNotEmpty) ...[
-                  const SizedBox(height: 7),
-                  Text(
-                    focus,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFFB8BCD7),
-                      fontSize: 12,
-                      height: 1.35,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
               ],
             ),
-          ),
-          IconButton(
-            onPressed: () => _removeSchedule(schedule),
-            icon: const Icon(Icons.delete_outline_rounded),
-            color: const Color(0xFFF472B6),
-            tooltip: 'Hapus jadwal',
           ),
         ],
       ),
     );
   }
 
-  static const Color _bgColor = Color(0xFF0B0D22);
+  Widget _buildSavedSchedulesSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'JADWAL MENDATANG',
+          style: TextStyle(
+            color: _muted,
+            fontSize: 13,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0.4,
+          ),
+        ),
+        const SizedBox(height: 14),
+        if (savedSchedules.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: _surface,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: _border),
+            ),
+            child: const Text(
+              'Belum ada jadwal tersimpan.',
+              style: TextStyle(color: _muted, fontWeight: FontWeight.w700),
+            ),
+          )
+        else
+          ...savedSchedules.map((schedule) => _buildSchedulePreview(schedule)),
+      ],
+    );
+  }
+
+  Widget _buildSchedulePreview(Map<String, dynamic> schedule) {
+    final practice = schedule['practice']?.toString() ?? 'Latihan';
+    final target = schedule['target']?.toString() ?? '-';
+    final date = schedule['date']?.toString() ?? '-';
+    final time = schedule['time']?.toString() ?? '-';
+    final timezone = schedule['timezone']?.toString() ?? 'WIB';
+    final plan = practiceCatalog[practice] ?? practiceCatalog['Gitar']!;
+    final icon = plan['icon'] as IconData;
+    final color = plan['color'] as Color;
+
+    return InkWell(
+      onTap: () => _showScheduleDetail(schedule),
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _surface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: _border),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.18),
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: Icon(icon, color: color, size: 27),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    practice,
+                    style: const TextStyle(
+                      color: _text,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    target,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _pink,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(Icons.schedule_rounded, color: _muted, size: 13),
+                      const SizedBox(width: 4),
+                      Text(
+                        '$time $timezone',
+                        style: const TextStyle(
+                          color: _muted,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      const Icon(Icons.calendar_today_rounded, color: _muted, size: 13),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          date,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: _muted,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              onPressed: () => _startEditSchedule(schedule),
+              icon: const Icon(Icons.edit_outlined),
+              color: _cyan,
+              tooltip: 'Edit jadwal',
+            ),
+            IconButton(
+              onPressed: () => _deleteSchedule(schedule['id']?.toString() ?? ''),
+              icon: const Icon(Icons.delete_outline_rounded),
+              color: _muted,
+              tooltip: 'Hapus jadwal',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showScheduleDetail(Map<String, dynamic> schedule) {
+    final practice = schedule['practice']?.toString() ?? 'Latihan';
+    final target = schedule['target']?.toString() ?? '-';
+    final date = schedule['date']?.toString() ?? '-';
+    final time = schedule['time']?.toString() ?? '-';
+    final timezone = schedule['timezone']?.toString() ?? 'WIB';
+    final focus = schedule['focus']?.toString() ?? '-';
+    final plan = practiceCatalog[practice] ?? practiceCatalog['Gitar']!;
+    final icon = plan['icon'] as IconData;
+    final color = plan['color'] as Color;
+    final converted = _convertedTimesFromSchedule(schedule);
+    String detailZone = converted.containsKey(timezone) ? timezone : 'WIB';
+
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.72),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 22),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.84,
+                ),
+                child: Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: _surface,
+                    borderRadius: BorderRadius.circular(32),
+                    border: Border.all(color: _border),
+                  ),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: InkWell(
+                            onTap: () => Navigator.pop(context),
+                            borderRadius: BorderRadius.circular(20),
+                            child: Container(
+                              padding: const EdgeInsets.all(7),
+                              decoration: BoxDecoration(
+                                color: _surfaceSoft,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: const Icon(
+                                Icons.close_rounded,
+                                color: _text,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Container(
+                          width: 78,
+                          height: 78,
+                          decoration: BoxDecoration(
+                            color: color.withOpacity(0.22),
+                            borderRadius: BorderRadius.circular(22),
+                          ),
+                          child: Icon(icon, color: color, size: 40),
+                        ),
+                        const SizedBox(height: 18),
+                        Text(
+                          practice,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: _text,
+                            fontSize: 25,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Target: $target',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: _pink,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 22),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _smallInfoBox(
+                                icon: Icons.calendar_today_rounded,
+                                label: 'TANGGAL',
+                                value: date,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _smallInfoBox(
+                                icon: Icons.access_time_rounded,
+                                label: 'JAM',
+                                value: '$time $timezone',
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: _surfaceSoft,
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: _border),
+                          ),
+                          child: Text(
+                            'Fokus latihan: $focus',
+                            style: const TextStyle(
+                              color: _muted,
+                              fontSize: 13,
+                              height: 1.45,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: _surfaceSoft,
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: _border),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Konversi Zona Waktu',
+                                style: TextStyle(
+                                  color: _cyan.withOpacity(0.95),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              Container(
+                                height: 48,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _bg.withOpacity(0.6),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: _border),
+                                ),
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<String>(
+                                    value: detailZone,
+                                    isExpanded: true,
+                                    dropdownColor: _surfaceSoft,
+                                    iconEnabledColor: _cyan,
+                                    borderRadius: BorderRadius.circular(14),
+                                    style: const TextStyle(
+                                      color: _text,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                    items: converted.keys
+                                        .map(
+                                          (zone) => DropdownMenuItem(
+                                            value: zone,
+                                            child: Text(zone),
+                                          ),
+                                        )
+                                        .toList(),
+                                    onChanged: (value) {
+                                      if (value == null) return;
+                                      setDialogState(() {
+                                        detailZone = value;
+                                      });
+                                    },
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: _purple.withOpacity(0.18),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: _purple.withOpacity(0.55),
+                                  ),
+                                ),
+                                child: Text(
+                                  '$detailZone: ${converted[detailZone] ?? '-'}',
+                                  style: const TextStyle(
+                                    color: _text,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            onPressed: () => _startEditSchedule(
+                              schedule,
+                              closeDialog: true,
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _cyan,
+                              side: const BorderSide(color: _cyan),
+                              padding: const EdgeInsets.symmetric(vertical: 15),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            child: const Text(
+                              'Edit Jadwal',
+                              style: TextStyle(fontWeight: FontWeight.w900),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _surfaceSoft,
+                              padding: const EdgeInsets.symmetric(vertical: 17),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            child: const Text(
+                              'Tutup Detail',
+                              style: TextStyle(
+                                color: _text,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _bgColor,
+      backgroundColor: _bg,
       appBar: AppBar(
-        backgroundColor: _bgColor,
+        backgroundColor: _bg,
         elevation: 0,
-        centerTitle: true,
+        iconTheme: const IconThemeData(color: _text),
         title: const Text(
           'Smart Practice Scheduler',
-          style: TextStyle(
-            color: Color(0xFFF8FAFC),
-            fontWeight: FontWeight.w900,
-          ),
+          style: TextStyle(color: _text, fontWeight: FontWeight.w900),
         ),
-        iconTheme: const IconThemeData(color: Color(0xFFF8FAFC)),
       ),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 110),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 120),
           children: [
             const Text(
-              'Buat jadwal latihan berdasarkan tanggal, jam, dan zona waktu asli. Reminder otomatis akan mengikuti jam perangkat HP.',
+              'Music Practice Scheduler',
               style: TextStyle(
-                fontSize: 14,
-                height: 1.5,
-                color: Color(0xFFB8BCD7),
+                color: _cyan,
+                fontSize: 24,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Atur waktu latihanmu dengan lebih terstruktur',
+              style: TextStyle(
+                color: Color(0xFFB9C7FF),
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 18),
-            _buildDeviceTimeCard(),
-            const SizedBox(height: 18),
-            _buildManualTimeConverterCard(),
-            const SizedBox(height: 20),
-            _buildSectionTitle(
-              'Jenis latihan',
-              'Pilih area musik yang ingin kamu jadwalkan.',
-            ),
-            _buildChoiceChips(
-              values: practiceCatalog.keys.toList(),
-              selectedValue: selectedPractice,
-              onSelected: _selectPractice,
-            ),
-            const SizedBox(height: 18),
-            _buildSectionTitle(
-              'Target belajar',
-              'Target berubah mengikuti jenis latihan yang dipilih.',
-            ),
-            _buildChoiceChips(
-              values: _currentTargets,
-              selectedValue: selectedTarget,
-              onSelected: (value) => setState(() => selectedTarget = value),
-            ),
-            const SizedBox(height: 18),
-            _buildSectionTitle(
-              'Zona waktu asli',
-              'Zona ini menjadi acuan jadwal yang disimpan.',
-            ),
-            _buildChoiceChips(
-              values: zoneOffsets.keys.toList(),
-              selectedValue: selectedZone,
-              onSelected: (value) => setState(() => selectedZone = value),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _pickDate,
-                icon: const Icon(Icons.calendar_month_rounded),
-                label: Text('Pilih tanggal: ${_formatDate(selectedDate)}'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF8B5CF6),
-                  side: const BorderSide(color: Color(0xFF2D3050)),
-                  padding: const EdgeInsets.symmetric(vertical: 15),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _pickTime,
-                icon: const Icon(Icons.schedule_rounded),
-                label: Text(
-                  'Pilih jam latihan: ${_formatTime(selectedTime)} $selectedZone',
-                ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF8B5CF6),
-                  side: const BorderSide(color: Color(0xFF2D3050)),
-                  padding: const EdgeInsets.symmetric(vertical: 15),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            _buildSummaryCard(),
-            const SizedBox(height: 18),
-            SizedBox(
-              height: 54,
-              child: ElevatedButton.icon(
-                onPressed: isSaving ? null : _saveSchedule,
-                icon: isSaving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: _surfaceSoft,
-                        ),
-                      )
-                    : const Icon(Icons.save_rounded),
-                label: Text(
-                  isSaving ? 'Menyimpan...' : 'Simpan Jadwal & Reminder',
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF8B5CF6),
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: const Color(0xFFB7A8FF),
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 32),
+            _buildSchedulerForm(),
+            const SizedBox(height: 32),
             _buildSavedSchedulesSection(),
           ],
         ),
