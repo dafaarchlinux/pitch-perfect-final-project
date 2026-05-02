@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/practice_progress_service.dart';
 import '../../services/session_service.dart';
@@ -26,6 +28,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   static const Color _pink = Color(0xFFF472B6);
   static const Color _green = Color(0xFF34D399);
 
+  static const String _bestScoreKey = 'repeat_pitch_best_score';
+  static const String _bestLevelKey = 'repeat_pitch_best_level';
+  static const String _bestComboKey = 'repeat_pitch_best_combo';
+  static const String _lastScoreKey = 'repeat_pitch_last_score';
+  static const String _lastLevelKey = 'repeat_pitch_last_level';
+  static const String _lastComboKey = 'repeat_pitch_last_combo';
+  static const String _lastAccuracyKey = 'repeat_pitch_last_accuracy';
+  static const String _lastPlayedAtKey = 'repeat_pitch_last_played_at';
+
+  Timer? _gameScoreRefreshTimer;
+
   String userName = 'Pengguna';
   String userEmail = 'guest@email.com';
   String? profileImagePath;
@@ -38,6 +51,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     'best_level': 0,
     'best_combo': 0,
   };
+  Map<String, dynamic>? latestGameResult;
 
   bool biometricEnabled = false;
   bool isLoading = true;
@@ -46,6 +60,105 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _loadProfileData();
+    _startGameScoreAutoRefresh();
+  }
+
+  @override
+  void dispose() {
+    _gameScoreRefreshTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startGameScoreAutoRefresh() {
+    _gameScoreRefreshTimer?.cancel();
+    _gameScoreRefreshTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _refreshGameScoreOnly(),
+    );
+  }
+
+  int _biggerInt(int a, int b) => a > b ? a : b;
+
+  bool _sameGameRecords(Map<String, int> a, Map<String, int> b) {
+    return (a['best_score'] ?? 0) == (b['best_score'] ?? 0) &&
+        (a['best_level'] ?? 0) == (b['best_level'] ?? 0) &&
+        (a['best_combo'] ?? 0) == (b['best_combo'] ?? 0);
+  }
+
+  Future<Map<String, int>> _readGameRecords() async {
+    Map<String, int> records = {
+      'best_score': 0,
+      'best_level': 0,
+      'best_combo': 0,
+    };
+
+    try {
+      records = await PracticeProgressService.getGameRecords();
+    } catch (_) {}
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      records = {
+        'best_score': _biggerInt(
+          records['best_score'] ?? 0,
+          prefs.getInt(_bestScoreKey) ?? 0,
+        ),
+        'best_level': _biggerInt(
+          records['best_level'] ?? 0,
+          prefs.getInt(_bestLevelKey) ?? 0,
+        ),
+        'best_combo': _biggerInt(
+          records['best_combo'] ?? 0,
+          prefs.getInt(_bestComboKey) ?? 0,
+        ),
+      };
+    } catch (_) {}
+
+    return records;
+  }
+
+  Future<Map<String, dynamic>?> _readLatestGameResult() async {
+    Map<String, dynamic>? latestGame;
+
+    try {
+      latestGame = await PracticeProgressService.getLatestGameResult();
+    } catch (_) {}
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final lastScore = prefs.getInt(_lastScoreKey);
+      final lastPlayedAt = prefs.getString(_lastPlayedAtKey);
+
+      if (lastScore != null) {
+        final fallbackLatestGame = {
+          'game_name': 'Repeat Pitch',
+          'raw_score': lastScore,
+          'score': prefs.getInt(_lastAccuracyKey) ?? 0,
+          'level': prefs.getInt(_lastLevelKey) ?? 0,
+          'combo': prefs.getInt(_lastComboKey) ?? 0,
+          'played_at': lastPlayedAt,
+        };
+
+        latestGame = fallbackLatestGame;
+      }
+    } catch (_) {}
+
+    return latestGame;
+  }
+
+  Future<void> _refreshGameScoreOnly() async {
+    final records = await _readGameRecords();
+    final latestGame = await _readLatestGameResult();
+
+    if (!mounted) return;
+
+    if (!_sameGameRecords(gameRecords, records) ||
+        latestGameResult.toString() != latestGame.toString()) {
+      setState(() {
+        gameRecords = records;
+        latestGameResult = latestGame;
+      });
+    }
   }
 
   Future<void> _loadProfileData() async {
@@ -66,6 +179,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       'best_level': 0,
       'best_combo': 0,
     };
+    Map<String, dynamic>? nextLatestGameResult;
     bool nextBiometricEnabled = false;
 
     try {
@@ -82,9 +196,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       nextAverageScore = summary['average_score'];
     } catch (_) {}
 
-    try {
-      nextGameRecords = await PracticeProgressService.getGameRecords();
-    } catch (_) {}
+    nextGameRecords = await _readGameRecords();
+    nextLatestGameResult = await _readLatestGameResult();
 
     try {
       nextBiometricEnabled =
@@ -103,6 +216,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       weeklySessions = nextWeeklySessions;
       averageScore = nextAverageScore;
       gameRecords = nextGameRecords;
+      latestGameResult = nextLatestGameResult;
       biometricEnabled = nextBiometricEnabled;
       isLoading = false;
     });
@@ -451,6 +565,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Widget _gameMiniInfo({
+    required String title,
+    required String value,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 8),
+      decoration: BoxDecoration(
+        color: _surfaceSoft,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color,
+              fontSize: 17,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: _muted,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _statItem({
     required String title,
     required String value,
@@ -656,8 +811,9 @@ Widget _buildMenus() {
                     child: CircularProgressIndicator(color: _purple),
                   ),
                 )
-              else
+              else ...[
                 _buildStats(),
+              ],
               const SizedBox(height: 24),
               _sectionTitle('Menu'),
               _buildMenus(),
