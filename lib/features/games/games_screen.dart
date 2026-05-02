@@ -30,6 +30,11 @@ class _GamesScreenState extends State<GamesScreen> {
   static const String _bestScoreKey = 'repeat_pitch_best_score';
   static const String _bestLevelKey = 'repeat_pitch_best_level';
   static const String _bestComboKey = 'repeat_pitch_best_combo';
+  static const String _lastScoreKey = 'repeat_pitch_last_score';
+  static const String _lastLevelKey = 'repeat_pitch_last_level';
+  static const String _lastComboKey = 'repeat_pitch_last_combo';
+  static const String _lastAccuracyKey = 'repeat_pitch_last_accuracy';
+  static const String _lastPlayedAtKey = 'repeat_pitch_last_played_at';
 
   final AudioPlayer audioPlayer = AudioPlayer();
   final Random random = Random();
@@ -131,11 +136,26 @@ class _GamesScreenState extends State<GamesScreen> {
     });
   }
 
-  Future<void> _saveBestScore() async {
+  Future<void> _saveBestScore({
+    required int lastScore,
+    required int lastLevel,
+    required int lastCombo,
+    required int lastAccuracy,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_bestScoreKey, bestScore);
-    await prefs.setInt(_bestLevelKey, bestLevel);
-    await prefs.setInt(_bestComboKey, bestCombo);
+
+    // Data ini dibaca juga oleh HomeScreen dan ProfileScreen.
+    // Jadi begitu game selesai, ringkasan skor di halaman lain bisa ikut update.
+    await Future.wait([
+      prefs.setInt(_bestScoreKey, bestScore),
+      prefs.setInt(_bestLevelKey, bestLevel),
+      prefs.setInt(_bestComboKey, bestCombo),
+      prefs.setInt(_lastScoreKey, lastScore),
+      prefs.setInt(_lastLevelKey, lastLevel),
+      prefs.setInt(_lastComboKey, lastCombo),
+      prefs.setInt(_lastAccuracyKey, lastAccuracy),
+      prefs.setString(_lastPlayedAtKey, DateTime.now().toIso8601String()),
+    ]);
   }
 
   Future<void> _playNote(int index) async {
@@ -297,7 +317,12 @@ class _GamesScreenState extends State<GamesScreen> {
       sequence = [];
     });
 
-    await _saveBestScore();
+    await _saveBestScore(
+      lastScore: finalScore,
+      lastLevel: finalLevel,
+      lastCombo: finalCombo,
+      lastAccuracy: accuracy,
+    );
 
     try {
       await PracticeProgressService.addPracticeSession(
