@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/audio_db_service.dart';
 import '../../services/deezer_music_service.dart';
@@ -33,6 +35,17 @@ class _HomeScreenState extends State<HomeScreen> {
   static const Color _pink = Color(0xFFF472B6);
   static const Color _green = Color(0xFF34D399);
 
+  static const String _bestScoreKey = 'repeat_pitch_best_score';
+  static const String _bestLevelKey = 'repeat_pitch_best_level';
+  static const String _bestComboKey = 'repeat_pitch_best_combo';
+  static const String _lastScoreKey = 'repeat_pitch_last_score';
+  static const String _lastLevelKey = 'repeat_pitch_last_level';
+  static const String _lastComboKey = 'repeat_pitch_last_combo';
+  static const String _lastAccuracyKey = 'repeat_pitch_last_accuracy';
+  static const String _lastPlayedAtKey = 'repeat_pitch_last_played_at';
+
+  Timer? _gameScoreRefreshTimer;
+
   String userName = 'Music Enthusiast';
   String? profileImagePath;
   bool isLoading = true;
@@ -48,6 +61,7 @@ class _HomeScreenState extends State<HomeScreen> {
     'best_level': 0,
     'best_combo': 0,
   };
+  Map<String, dynamic>? latestGameResult;
 
   List<Map<String, dynamic>> musicRecommendations = [];
   List<Map<String, dynamic>> instrumentPlans = [];
@@ -89,12 +103,106 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _loadHome();
     _loadNearestMusicStore();
+    _startGameScoreAutoRefresh();
   }
 
   @override
   void dispose() {
+    _gameScoreRefreshTimer?.cancel();
     audioPlayer.dispose();
     super.dispose();
+  }
+
+  void _startGameScoreAutoRefresh() {
+    _gameScoreRefreshTimer?.cancel();
+    _gameScoreRefreshTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _refreshGameScoreOnly(),
+    );
+  }
+
+  int _biggerInt(int a, int b) => a > b ? a : b;
+
+  bool _sameGameRecords(Map<String, int> a, Map<String, int> b) {
+    return (a['best_score'] ?? 0) == (b['best_score'] ?? 0) &&
+        (a['best_level'] ?? 0) == (b['best_level'] ?? 0) &&
+        (a['best_combo'] ?? 0) == (b['best_combo'] ?? 0);
+  }
+
+  Future<Map<String, int>> _readGameRecords() async {
+    Map<String, int> records = {
+      'best_score': 0,
+      'best_level': 0,
+      'best_combo': 0,
+    };
+
+    try {
+      records = await PracticeProgressService.getGameRecords();
+    } catch (_) {}
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      records = {
+        'best_score': _biggerInt(
+          records['best_score'] ?? 0,
+          prefs.getInt(_bestScoreKey) ?? 0,
+        ),
+        'best_level': _biggerInt(
+          records['best_level'] ?? 0,
+          prefs.getInt(_bestLevelKey) ?? 0,
+        ),
+        'best_combo': _biggerInt(
+          records['best_combo'] ?? 0,
+          prefs.getInt(_bestComboKey) ?? 0,
+        ),
+      };
+    } catch (_) {}
+
+    return records;
+  }
+
+  Future<Map<String, dynamic>?> _readLatestGameResult() async {
+    Map<String, dynamic>? latestGame;
+
+    try {
+      latestGame = await PracticeProgressService.getLatestGameResult();
+    } catch (_) {}
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final lastScore = prefs.getInt(_lastScoreKey);
+      final lastPlayedAt = prefs.getString(_lastPlayedAtKey);
+
+      if (lastScore != null) {
+        final fallbackLatestGame = {
+          'game_name': 'Repeat Pitch',
+          'raw_score': lastScore,
+          'score': prefs.getInt(_lastAccuracyKey) ?? 0,
+          'level': prefs.getInt(_lastLevelKey) ?? 0,
+          'combo': prefs.getInt(_lastComboKey) ?? 0,
+          'played_at': lastPlayedAt,
+        };
+
+        latestGame = fallbackLatestGame;
+      }
+    } catch (_) {}
+
+    return latestGame;
+  }
+
+  Future<void> _refreshGameScoreOnly() async {
+    final records = await _readGameRecords();
+    final latestGame = await _readLatestGameResult();
+
+    if (!mounted) return;
+
+    if (!_sameGameRecords(gameRecords, records) ||
+        latestGameResult.toString() != latestGame.toString()) {
+      setState(() {
+        gameRecords = records;
+        latestGameResult = latestGame;
+      });
+    }
   }
 
   Future<void> _loadHome() async {
@@ -112,6 +220,7 @@ class _HomeScreenState extends State<HomeScreen> {
       'best_level': 0,
       'best_combo': 0,
     };
+    Map<String, dynamic>? latestGame;
 
     try {
       summary = await PracticeProgressService.getSummary();
@@ -125,9 +234,8 @@ class _HomeScreenState extends State<HomeScreen> {
       schedules = await PracticeProgressService.getPracticeSchedules();
     } catch (_) {}
 
-    try {
-      records = await PracticeProgressService.getGameRecords();
-    } catch (_) {}
+    records = await _readGameRecords();
+    latestGame = await _readLatestGameResult();
 
     try {
       history = await PracticeProgressService.getHistory();
@@ -144,6 +252,7 @@ class _HomeScreenState extends State<HomeScreen> {
       instrumentPlans = instruments;
       practiceSchedules = schedules;
       gameRecords = records;
+      latestGameResult = latestGame;
       historyItems = history;
       isLoading = false;
     });
@@ -644,6 +753,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
 
   Widget _summaryMiniCard({
     required String title,
@@ -1226,7 +1336,7 @@ class _HomeScreenState extends State<HomeScreen> {
               _sectionTitle('Ringkasan Progres'),
               const SizedBox(height: 14),
               _buildSummaryCard(),
-              const SizedBox(height: 30),
+              const SizedBox(height: 16),
               _sectionTitle('Akses Cepat'),
               const SizedBox(height: 14),
               _buildQuickActions(),
