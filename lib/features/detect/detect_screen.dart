@@ -381,6 +381,8 @@ class _DetectScreenState extends State<DetectScreen> {
         isCheckingRoom = false;
         _resetDetectionValue();
       });
+
+      await _showRoomStatusDialog(result);
     } catch (_) {
       try {
         await pitchSubscription?.cancel();
@@ -390,12 +392,133 @@ class _DetectScreenState extends State<DetectScreen> {
 
       if (!mounted) return;
 
+      const failedStatus = 'Tidak bisa dicek';
       setState(() {
-        roomStatus = 'Tidak bisa dicek';
+        roomStatus = failedStatus;
         isCheckingRoom = false;
         _resetDetectionValue();
       });
+
+      await _showRoomStatusDialog(failedStatus);
     }
+  }
+
+  Color _roomStatusColor(String status) {
+    switch (status) {
+      case 'Tenang (Optimal)':
+        return _green;
+      case 'Cukup tenang':
+        return _yellow;
+      case 'Terlalu bising':
+        return _pink;
+      case 'Tidak bisa dicek':
+        return _orange;
+      case 'Mengecek...':
+        return _cyan;
+      default:
+        return _cyan;
+    }
+  }
+
+  IconData _roomStatusIcon(String status) {
+    switch (status) {
+      case 'Tenang (Optimal)':
+        return Icons.check_circle_rounded;
+      case 'Cukup tenang':
+        return Icons.info_rounded;
+      case 'Terlalu bising':
+        return Icons.warning_amber_rounded;
+      case 'Tidak bisa dicek':
+        return Icons.error_outline_rounded;
+      default:
+        return Icons.air_rounded;
+    }
+  }
+
+  String _roomStatusMessage(String status) {
+    switch (status) {
+      case 'Tenang (Optimal)':
+        return 'Ruangan sudah cukup tenang dan cocok digunakan untuk tuning gitar atau deteksi suara.';
+      case 'Cukup tenang':
+        return 'Ruangan masih bisa digunakan, tetapi hasil deteksi mungkin sedikit kurang stabil. Usahakan kurangi suara sekitar.';
+      case 'Terlalu bising':
+        return 'Ruangan terlalu bising. Sebaiknya pindah ke tempat yang lebih tenang agar nada bisa terbaca lebih akurat.';
+      case 'Tidak bisa dicek':
+        return 'Status ruangan belum berhasil dicek. Pastikan izin mikrofon aktif, lalu coba cek ulang.';
+      default:
+        return 'Status ruangan belum tersedia. Tekan tombol Mulai Cek Ruangan untuk melakukan pengecekan.';
+    }
+  }
+
+  Future<void> _showRoomStatusDialog(String status) async {
+    if (!mounted) return;
+
+    final color = _roomStatusColor(status);
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: _surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
+            side: BorderSide(color: color.withOpacity(0.55)),
+          ),
+          title: Row(
+            children: [
+              Icon(_roomStatusIcon(status), color: color),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Status Ruangan',
+                  style: TextStyle(
+                    color: _text,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                status,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                _roomStatusMessage(status),
+                style: const TextStyle(
+                  color: _muted,
+                  fontSize: 13,
+                  height: 1.45,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(
+                'Mengerti',
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _saveDetectionSession() async {
@@ -975,6 +1098,7 @@ class _DetectScreenState extends State<DetectScreen> {
     required Color color,
   }) {
     return Container(
+      constraints: const BoxConstraints(minHeight: 86),
       padding: const EdgeInsets.all(17),
       decoration: BoxDecoration(
         color: _surface,
@@ -1008,11 +1132,13 @@ class _DetectScreenState extends State<DetectScreen> {
                 const SizedBox(height: 4),
                 Text(
                   value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
+                  softWrap: true,
+                  overflow: TextOverflow.visible,
                   style: const TextStyle(
                     color: _text,
                     fontSize: 13,
+                    height: 1.25,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
@@ -1094,7 +1220,7 @@ class _DetectScreenState extends State<DetectScreen> {
                     icon: Icons.sensors_rounded,
                     title: 'STATUS RUANG',
                     value: roomStatus,
-                    color: roomStatus == 'Tenang (Optimal)' ? _green : _cyan,
+                    color: _roomStatusColor(roomStatus),
                   ),
                 ),
                 const SizedBox(width: 14),
