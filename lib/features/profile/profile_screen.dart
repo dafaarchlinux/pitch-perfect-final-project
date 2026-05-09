@@ -28,9 +28,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
   static const Color _pink = Color(0xFFF472B6);
   static const Color _green = Color(0xFF34D399);
 
+  // Piano Game / Repeat Pitch
   static const String _bestScoreKey = 'repeat_pitch_best_score';
   static const String _bestLevelKey = 'repeat_pitch_best_level';
   static const String _bestComboKey = 'repeat_pitch_best_combo';
+
+  // Voice Game / Voice Match
+  static const String _voiceBestScoreKey = 'voice_match_best_score';
+  static const String _voiceBestLevelKey = 'voice_match_best_level';
+  static const String _voiceBestComboKey = 'voice_match_best_combo';
+
+  // Overall best game, disimpan dari halaman Games.
+  static const String _overallBestScoreKey = 'music_game_best_score';
+  static const String _overallBestLevelKey = 'music_game_best_level';
+  static const String _overallBestComboKey = 'music_game_best_combo';
+  static const String _overallBestSourceKey = 'music_game_best_source';
+
   static const String _lastScoreKey = 'repeat_pitch_last_score';
   static const String _lastLevelKey = 'repeat_pitch_last_level';
   static const String _lastComboKey = 'repeat_pitch_last_combo';
@@ -52,6 +65,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     'best_combo': 0,
   };
   Map<String, dynamic>? latestGameResult;
+  String bestGameSource = 'Skor';
 
   bool biometricEnabled = false;
   bool isLoading = true;
@@ -98,23 +112,84 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      records = {
-        'best_score': _biggerInt(
-          records['best_score'] ?? 0,
-          prefs.getInt(_bestScoreKey) ?? 0,
-        ),
-        'best_level': _biggerInt(
-          records['best_level'] ?? 0,
-          prefs.getInt(_bestLevelKey) ?? 0,
-        ),
-        'best_combo': _biggerInt(
-          records['best_combo'] ?? 0,
-          prefs.getInt(_bestComboKey) ?? 0,
-        ),
-      };
+
+      final legacyScore = records['best_score'] ?? 0;
+      final legacyLevel = records['best_level'] ?? 0;
+      final legacyCombo = records['best_combo'] ?? 0;
+
+      final pianoScore = _biggerInt(
+        legacyScore,
+        prefs.getInt(_bestScoreKey) ?? 0,
+      );
+      final pianoLevel = _biggerInt(
+        legacyLevel,
+        prefs.getInt(_bestLevelKey) ?? 0,
+      );
+      final pianoCombo = _biggerInt(
+        legacyCombo,
+        prefs.getInt(_bestComboKey) ?? 0,
+      );
+
+      final voiceScore = prefs.getInt(_voiceBestScoreKey) ?? 0;
+      final voiceLevel = prefs.getInt(_voiceBestLevelKey) ?? 0;
+      final voiceCombo = prefs.getInt(_voiceBestComboKey) ?? 0;
+
+      final overallScore = prefs.getInt(_overallBestScoreKey) ?? 0;
+      final overallLevel = prefs.getInt(_overallBestLevelKey) ?? 0;
+      final overallCombo = prefs.getInt(_overallBestComboKey) ?? 0;
+
+      if (overallScore >= pianoScore && overallScore >= voiceScore) {
+        records = {
+          'best_score': overallScore,
+          'best_level': overallLevel,
+          'best_combo': overallCombo,
+        };
+      } else if (voiceScore > pianoScore) {
+        records = {
+          'best_score': voiceScore,
+          'best_level': voiceLevel,
+          'best_combo': voiceCombo,
+        };
+      } else {
+        records = {
+          'best_score': pianoScore,
+          'best_level': pianoLevel,
+          'best_combo': pianoCombo,
+        };
+      }
     } catch (_) {}
 
     return records;
+  }
+
+  Future<String> _readBestGameSource(Map<String, int> records) async {
+    final bestScore = records['best_score'] ?? 0;
+    if (bestScore <= 0) return 'Skor';
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final pianoScore = prefs.getInt(_bestScoreKey) ?? 0;
+      final voiceScore = prefs.getInt(_voiceBestScoreKey) ?? 0;
+      final overallScore = prefs.getInt(_overallBestScoreKey) ?? 0;
+      final overallSource = prefs.getString(_overallBestSourceKey);
+
+      if (overallScore == bestScore &&
+          overallSource != null &&
+          overallSource.trim().isNotEmpty &&
+          overallSource != 'Belum ada game') {
+        return overallSource;
+      }
+
+      if (voiceScore == bestScore && voiceScore >= pianoScore) {
+        return 'Voice Game';
+      }
+
+      if (pianoScore == bestScore) {
+        return 'Piano Game';
+      }
+    } catch (_) {}
+
+    return 'Piano Game';
   }
 
   Future<Map<String, dynamic>?> _readLatestGameResult() async {
@@ -148,15 +223,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _refreshGameScoreOnly() async {
     final records = await _readGameRecords();
+    final source = await _readBestGameSource(records);
     final latestGame = await _readLatestGameResult();
 
     if (!mounted) return;
 
     if (!_sameGameRecords(gameRecords, records) ||
-        latestGameResult.toString() != latestGame.toString()) {
+        latestGameResult.toString() != latestGame.toString() ||
+        bestGameSource != source) {
       setState(() {
         gameRecords = records;
         latestGameResult = latestGame;
+        bestGameSource = source;
       });
     }
   }
@@ -180,6 +258,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       'best_combo': 0,
     };
     Map<String, dynamic>? nextLatestGameResult;
+    String nextBestGameSource = 'Skor';
     bool nextBiometricEnabled = false;
 
     try {
@@ -197,6 +276,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (_) {}
 
     nextGameRecords = await _readGameRecords();
+    nextBestGameSource = await _readBestGameSource(nextGameRecords);
     nextLatestGameResult = await _readLatestGameResult();
 
     try {
@@ -217,6 +297,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       averageScore = nextAverageScore;
       gameRecords = nextGameRecords;
       latestGameResult = nextLatestGameResult;
+      bestGameSource = nextBestGameSource;
       biometricEnabled = nextBiometricEnabled;
       isLoading = false;
     });
@@ -556,7 +637,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         const SizedBox(width: 10),
         _statItem(
-          title: 'Skor',
+          title: bestScore <= 0 ? 'Skor' : bestGameSource,
           value: '$bestScore',
           icon: Icons.videogame_asset_rounded,
           color: _pink,
