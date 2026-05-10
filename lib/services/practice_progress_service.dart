@@ -375,6 +375,58 @@ class PracticeProgressService {
     });
   }
 
+  static Future<Map<String, dynamic>?> getLatestGameResult() async {
+    final history = await getHistory();
+
+    for (final item in history) {
+      final type = item['type']?.toString().toLowerCase() ?? '';
+      final title = item['title']?.toString().toLowerCase() ?? '';
+      final metadata = item['metadata'];
+
+      final isGame =
+          type.contains('game') ||
+          title.contains('game') ||
+          title.contains('repeat pitch');
+
+      if (!isGame) continue;
+
+      final meta = metadata is Map
+          ? Map<String, dynamic>.from(metadata)
+          : <String, dynamic>{};
+
+      return {
+        ...meta,
+        'game_name': meta['game_name'] ?? item['title'] ?? 'Repeat Pitch',
+        'raw_score': meta['raw_score'] ?? item['score'] ?? 0,
+        'score': item['score'] ?? meta['score'] ?? 0,
+        'level': item['level'] ?? meta['level'] ?? 0,
+        'combo': item['combo'] ?? meta['combo'] ?? 0,
+        'result': meta['result'] ?? item['passed'],
+        'played_at': item['created_at'],
+        'storage': item['storage'] ?? 'Hive',
+      };
+    }
+
+    final records = await getGameRecords();
+    final hasRecord =
+        (records['best_score'] ?? 0) > 0 ||
+        (records['best_level'] ?? 0) > 0 ||
+        (records['best_combo'] ?? 0) > 0;
+
+    if (!hasRecord) return null;
+
+    return {
+      'game_name': 'Repeat Pitch',
+      'raw_score': records['best_score'] ?? 0,
+      'score': records['best_score'] ?? 0,
+      'level': records['best_level'] ?? 0,
+      'combo': records['best_combo'] ?? 0,
+      'result': null,
+      'played_at': null,
+      'storage': 'Hive',
+    };
+  }
+
   static Future<List<Map<String, dynamic>>> getInstrumentInterests() async {
     await _migrateOldInstrumentInterests();
 
